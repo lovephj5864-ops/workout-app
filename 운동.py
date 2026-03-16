@@ -376,47 +376,56 @@ with tab_workout:
 
                     st.write("") 
 
+                                  
                     default_w = workout.get('suggested_weight', 20.0)
                     default_r = workout['target_reps']
                     sets = workout['target_sets']
                     ex_name = workout['name']
                     
-                    past_msg = ""
-                    can_increase = False
-                    last_weight = default_w
+                    # ⭐ 핵심 변경: 매드프로페서 루틴인지 확인
+                    is_madprofessor = "[매드프로페서]" in selected_routine_name
                     
-                    if not past_logs_df.empty and '사용자' in past_logs_df.columns:
-                        past_data = past_logs_df[(past_logs_df['종목'] == ex_name) & (past_logs_df['사용자'] == current_user)]
-                        if not past_data.empty:
-                            last_date = past_data['날짜'].max()
-                            last_session = past_data[past_data['날짜'] == last_date]
-                            
-                            success_count = len(last_session[last_session['완료여부'] == 'O'])
-                            total_count = len(last_session)
-                            last_weight = float(last_session['무게'].iloc[-1])
-                            last_reps = int(last_session['횟수'].iloc[-1])
-                            
-                            past_msg = f"📅 **{current_user}**님의 마지막 기록({last_date}): **{last_weight}kg x {last_reps}회 x {total_count}세트** "
-                            
-                            if success_count == total_count and total_count > 0:
-                                past_msg += "(전 세트 성공! 🌟)"
-                                can_increase = True
-                            else:
-                                past_msg += f"({success_count}/{total_count} 세트 완료)"
-                    
-                    if can_increase:
-                        st.success(past_msg)
-                        decision = st.radio(
-                            "오늘의 증량 여부를 선택하세요!", 
-                            [f"유지하기 ({last_weight}kg)", f"2.5kg 증량하기 ({last_weight + 2.5}kg)"], 
-                            horizontal=True, key=f"dec_{w_idx}"
-                        )
-                        master_weight = last_weight + 2.5 if "증량하기" in decision else last_weight
-                    elif past_msg:
-                        st.info(past_msg + " ➔ 오늘은 동일한 무게로 완벽한 자세에 도전해보세요!")
-                        master_weight = last_weight
-                    else:
+                    if is_madprofessor:
+                        st.info(f"🔥 매드프로페서 목표 중량: **{default_w}kg**이 우선 적용되었습니다.")
                         master_weight = default_w
+                    else:
+                        # 일반 루틴일 때만 과거 기록을 뒤져서 증량을 제안합니다.
+                        past_msg = ""
+                        can_increase = False
+                        last_weight = default_w
+                        
+                        if not past_logs_df.empty and '사용자' in past_logs_df.columns:
+                            past_data = past_logs_df[(past_logs_df['종목'] == ex_name) & (past_logs_df['사용자'] == current_user)]
+                            if not past_data.empty:
+                                last_date = past_data['날짜'].max()
+                                last_session = past_data[past_data['날짜'] == last_date]
+                                
+                                success_count = len(last_session[last_session['완료여부'] == 'O'])
+                                total_count = len(last_session)
+                                last_weight = float(last_session['무게'].iloc[-1])
+                                last_reps = int(last_session['횟수'].iloc[-1])
+                                
+                                past_msg = f"📅 **{current_user}**님의 마지막 기록({last_date}): **{last_weight}kg x {last_reps}회 x {total_count}세트** "
+                                
+                                if success_count == total_count and total_count > 0:
+                                    past_msg += "(전 세트 성공! 🌟)"
+                                    can_increase = True
+                                else:
+                                    past_msg += f"({success_count}/{total_count} 세트 완료)"
+                        
+                        if can_increase:
+                            st.success(past_msg)
+                            decision = st.radio(
+                                "오늘의 증량 여부를 선택하세요!", 
+                                [f"유지하기 ({last_weight}kg)", f"2.5kg 증량하기 ({last_weight + 2.5}kg)"], 
+                                horizontal=True, key=f"dec_{w_idx}"
+                            )
+                            master_weight = last_weight + 2.5 if "증량하기" in decision else last_weight
+                        elif past_msg:
+                            st.info(past_msg + " ➔ 오늘은 동일한 무게로 완벽한 자세에 도전해보세요!")
+                            master_weight = last_weight
+                        else:
+                            master_weight = default_w
 
                     st.write("") 
                     input_mode = st.radio("입력 모드 선택", ["전체 세트 일괄 설정", "세트별 개별 설정"], horizontal=True, key=f"mode_{w_idx}", label_visibility="collapsed")
