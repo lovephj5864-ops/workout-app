@@ -29,7 +29,7 @@ def init_connection():
 doc = init_connection()
 
 # ----------------------------------------------------
-# 1. DB 데이터 불러오기/저장하기 함수 (에러 방지 강화)
+# 1. DB 데이터 불러오기/저장하기 함수
 # ----------------------------------------------------
 @st.cache_data(ttl=60)
 def get_past_logs():
@@ -42,6 +42,8 @@ def get_past_logs():
     except Exception:
         return pd.DataFrame()
 
+# ⭐ 여기에 캐시를 달아 API 폭격을 막습니다!
+@st.cache_data(ttl=600) 
 def load_exercises_from_sheet():
     try:
         ex_sheet = doc.worksheet("Exercises")
@@ -56,15 +58,15 @@ def load_exercises_from_sheet():
     except Exception:
         return None
 
-# ⭐ 텅 빈 시트에서도 에러 없이 작동하도록 개선
+# ⭐ 여기에도 캐시를 달아줍니다!
+@st.cache_data(ttl=600) 
 def load_routines_from_sheet():
     try:
         routine_sheet = doc.worksheet("Routines")
-        all_data = routine_sheet.get_all_values() # 헤더 제약 없이 전체 데이터를 그냥 가져옴
+        all_data = routine_sheet.get_all_values()
         r_dict = {}
-        
-        if len(all_data) > 1: # 1행(헤더) 외에 데이터가 있을 때만 실행
-            for row in all_data[1:]: # 2행부터 읽기 시작
+        if len(all_data) > 1:
+            for row in all_data[1:]:
                 if len(row) >= 2:
                     name = row[0]
                     data_str = row[1]
@@ -72,8 +74,8 @@ def load_routines_from_sheet():
                         r_dict[name] = json.loads(data_str)
         return r_dict
     except Exception as e:
-        st.error(f"루틴 불러오기 에러: {e}")
         return {}
+
 
 def save_routine_to_sheet(routine_name, routine_data):
     try:
@@ -109,16 +111,16 @@ def calculate_madprofessor_start_weight(pr_weight, pr_reps, min_plate):
     return round_to_plate(start_weight, min_plate)
 
 # ----------------------------------------------------
-# 3. 앱 세션 초기화
+# 3. 앱 세션 초기화 (조건문 엄격하게 수정!)
 # ----------------------------------------------------
-if 'exercises' not in st.session_state or st.session_state.exercises is None:
+if 'exercises' not in st.session_state: 
     loaded_ex = load_exercises_from_sheet()
     if loaded_ex:
         st.session_state.exercises = loaded_ex
     else:
         st.session_state.exercises = {"가슴": ["플랫 벤치프레스"], "등": ["데드리프트"], "하체": ["바벨 스쿼트"]}
 
-if 'routines' not in st.session_state or not st.session_state.routines:
+if 'routines' not in st.session_state: 
     st.session_state.routines = load_routines_from_sheet()
 
 # ----------------------------------------------------
