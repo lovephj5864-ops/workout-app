@@ -9,15 +9,15 @@ import json
 import os
 
 # ==========================================
-# ⭐ 강력한 해결책: 사이드바 수동 동기화 버튼
+# ⭐ 사이드바 수동 동기화 버튼
 # ==========================================
 with st.sidebar:
     st.subheader("🔄 서버 데이터 동기화")
     st.caption("구글 시트와 연결이 끊기거나 데이터가 안 보일 때 눌러주세요. (캐시 초기화)")
     if st.button("앱 초기화 및 새로고침", type="primary", use_container_width=True):
-        st.cache_data.clear()       # 10분 기억 지우기
-        st.cache_resource.clear()   # 구글 연결 초기화
-        st.session_state.clear()    # 화면 상태 초기화
+        st.cache_data.clear()       
+        st.cache_resource.clear()   
+        st.session_state.clear()    
         st.success("초기화 완료! 데이터를 다시 불러옵니다.")
         st.rerun()
 
@@ -38,7 +38,7 @@ def init_connection():
 doc = init_connection()
 
 # ----------------------------------------------------
-# 1. DB 데이터 불러오기/저장하기 함수 (안정성 극대화)
+# 1. DB 데이터 불러오기/저장하기 함수
 # ----------------------------------------------------
 @st.cache_data(ttl=60)
 def get_past_logs():
@@ -54,7 +54,6 @@ def get_past_logs():
 def load_exercises_from_sheet():
     try:
         ex_sheet = doc.worksheet("Exercises")
-        # get_all_records 대신 get_all_values를 써서 빈칸/에러로 인한 튕김 방지!
         all_data = ex_sheet.get_all_values() 
         ex_dict = {"가슴": [], "등": [], "하체": [], "어깨": [], "팔": [], "복근/코어": [], "유산소": []}
         if len(all_data) > 1:
@@ -66,7 +65,6 @@ def load_exercises_from_sheet():
                         ex_dict[part].append(name)
         return ex_dict
     except Exception as e:
-        print(f"종목 로드 에러: {e}")
         return None
 
 @st.cache_data(ttl=600)
@@ -84,7 +82,6 @@ def load_routines_from_sheet():
                         r_dict[name] = json.loads(data_str)
         return r_dict
     except Exception as e:
-        print(f"루틴 로드 에러: {e}")
         return None
 
 def save_routine_to_sheet(routine_name, routine_data):
@@ -99,7 +96,6 @@ def save_routine_to_sheet(routine_name, routine_data):
         else:
             routine_sheet.append_row([routine_name, data_str])
             
-        # 저장 후 화면 동기화
         st.session_state.routines[routine_name] = routine_data
         load_routines_from_sheet.clear() 
         
@@ -108,7 +104,7 @@ def save_routine_to_sheet(routine_name, routine_data):
             
         return True
     except Exception as e:
-        st.error(f"구글 시트 저장 실패! 1분 뒤 사이드바의 [새로고침]을 누르고 다시 시도하세요. (에러: {e})")
+        st.error(f"구글 시트 저장 실패! 1분 뒤 사이드바의 [새로고침]을 누르고 다시 시도하세요.")
         return False
 
 # ----------------------------------------------------
@@ -126,14 +122,13 @@ def calculate_madprofessor_start_weight(pr_weight, pr_reps, min_plate):
     return round_to_plate(start_weight, min_plate)
 
 # ----------------------------------------------------
-# 3. 앱 세션 초기화 (에러 감지 및 복구 기능 포함)
+# 3. 앱 세션 초기화
 # ----------------------------------------------------
 if 'exercises' not in st.session_state or st.session_state.exercises is None:
     loaded_ex = load_exercises_from_sheet()
     if loaded_ex:
         st.session_state.exercises = loaded_ex
     else:
-        # 에러 시 나타나는 비상용 데이터
         st.session_state.exercises = {"가슴": ["플랫 벤치프레스"], "등": ["데드리프트"], "하체": ["바벨 스쿼트"], "어깨": [], "팔": [], "복근/코어": [], "유산소": []}
 
 if 'routines' not in st.session_state or st.session_state.routines is None:
@@ -143,21 +138,75 @@ if 'routines' not in st.session_state or st.session_state.routines is None:
     else:
         st.session_state.routines = {}
 
-def get_flat_exercise_list():
-    flat_list = []
-    for category, ex_list in st.session_state.exercises.items():
-        for ex in ex_list:
-            flat_list.append(f"[{category}] {ex}")
-    return flat_list
-
 # ----------------------------------------------------
 # 화면 UI 시작
 # ----------------------------------------------------
 st.title("🏋️ 플릭 스타일 운동 트래커")
 current_user = st.text_input("👤 사용자 닉네임 입력 (개인 맞춤 증량을 위해 필수)", placeholder="예: 운동매니아1")
 
-tab_workout, tab_manage, tab_mad = st.tabs(["💪 오늘의 운동", "⚙️ 종목 및 루틴 관리", "🔥 매드프로페서 5x5"])
+# ⭐ 탭 4개로 확장!
+tab_workout, tab_manage, tab_mad, tab_analysis = st.tabs(["💪 오늘의 운동", "⚙️ 종목 및 루틴 관리", "🔥 매드프로페서 5x5", "📊 볼륨 분석"])
 past_logs_df = get_past_logs()
+
+# ==========================================
+# [탭 4] 📊 볼륨 분석 대시보드 (신규 기능!)
+# ==========================================
+with tab_analysis:
+    st.header("📊 내 볼륨 분석 대시보드")
+    if not current_user:
+        st.warning("상단에 사용자 닉네임을 입력하셔야 데이터를 분석할 수 있습니다.")
+    elif past_logs_df.empty or '사용자' not in past_logs_df.columns:
+        st.info("아직 저장된 구글 시트 기록이 없습니다.")
+    else:
+        # 현재 사용자의 완료된 운동만 필터링
+        user_df = past_logs_df[(past_logs_df['사용자'] == current_user) & (past_logs_df['완료여부'] == 'O')].copy()
+        
+        if user_df.empty:
+            st.info("완료된 운동 기록이 아직 없습니다. 오늘의 운동을 저장해 보세요!")
+        else:
+            # 종목을 부위로 맵핑(연결)하기 위한 사전 생성
+            ex_to_cat = {}
+            for cat, ex_list in st.session_state.exercises.items():
+                for ex in ex_list:
+                    ex_to_cat[ex] = cat
+            
+            # 볼륨 계산 및 날짜 데이터 정리
+            user_df['부위'] = user_df['종목'].map(ex_to_cat).fillna('기타')
+            user_df['볼륨'] = user_df['무게'] * user_df['횟수']
+            user_df['날짜_dt'] = pd.to_datetime(user_df['날짜'])
+            
+            # 검색 필터 UI
+            ac1, ac2 = st.columns(2)
+            time_filter = ac1.selectbox("기간 단위", ["일간", "주간", "월간"])
+            part_filter = ac2.selectbox("부위 선택", ["전체"] + list(st.session_state.exercises.keys()))
+            
+            # 부위 필터 적용
+            if part_filter != "전체":
+                user_df = user_df[user_df['부위'] == part_filter]
+                
+            # 기간 필터 적용 및 그룹화
+            if time_filter == "일간":
+                grouped = user_df.groupby('날짜')['볼륨'].sum().reset_index()
+                x_col = '날짜'
+            elif time_filter == "주간":
+                # 연도-주차 형태로 변환 (예: 2024-42주차)
+                user_df['주차'] = user_df['날짜_dt'].dt.isocalendar().year.astype(str) + "년 " + user_df['날짜_dt'].dt.isocalendar().week.astype(str) + "주차"
+                grouped = user_df.groupby('주차')['볼륨'].sum().reset_index()
+                x_col = '주차'
+            else: # 월간
+                user_df['월'] = user_df['날짜_dt'].dt.strftime('%Y년 %m월')
+                grouped = user_df.groupby('월')['볼륨'].sum().reset_index()
+                x_col = '월'
+                
+            # 그래프 그리기
+            st.write("") # 여백
+            if grouped.empty:
+                st.warning("선택하신 조건에 해당하는 데이터가 없습니다.")
+            else:
+                st.subheader(f"📈 {part_filter} 부위 {time_filter} 볼륨 변화 (kg)")
+                # 막대그래프 출력 (x축: 기간, y축: 볼륨)
+                st.bar_chart(data=grouped.set_index(x_col), use_container_width=True)
+
 
 # ==========================================
 # [탭 3] 매드프로페서 5x5
@@ -236,13 +285,13 @@ with tab_manage:
                         load_exercises_from_sheet.clear()
                         st.success(f"'{del_exercise}' 삭제 완료!")
                 except Exception as e:
-                    st.error(f"구글 시트 삭제 중 오류 발생: {e}")
+                    st.error("구글 시트 삭제 중 오류 발생")
                 st.rerun()
         else:
             st.caption("해당 부위에 등록된 종목이 없습니다.")
 
     st.write("")
-    st.subheader("📋 부위별 등록된 종목 목록 (DB 연동)")
+    st.subheader("📋 부위별 등록된 종목 목록")
     cols = st.columns(3)
     col_idx = 0
     for category, ex_list in st.session_state.exercises.items():
@@ -356,6 +405,32 @@ with tab_workout:
                 if key.startswith("done_"):
                     del st.session_state[key]
 
+        # ⭐ 실시간 볼륨 계산을 위한 변수 및 컨테이너(공간) 예약
+        db_vol_today = 0
+        db_vol_week = 0
+        db_vol_month = 0
+        current_unsaved_vol = 0
+        
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        this_year_month = datetime.now().strftime("%Y-%m")
+        current_year_week = datetime.now().isocalendar()
+        this_yw = f"{current_year_week[0]}-{current_year_week[1]}"
+        
+        if not past_logs_df.empty and '사용자' in past_logs_df.columns:
+            user_logs = past_logs_df[(past_logs_df['사용자'] == current_user) & (past_logs_df['완료여부'] == 'O')].copy()
+            if not user_logs.empty:
+                user_logs['날짜_dt'] = pd.to_datetime(user_logs['날짜'])
+                user_logs['볼륨'] = user_logs['무게'] * user_logs['횟수']
+                
+                db_vol_today = user_logs[user_logs['날짜'] == today_str]['볼륨'].sum()
+                db_vol_month = user_logs[user_logs['날짜_dt'].dt.strftime('%Y-%m') == this_year_month]['볼륨'].sum()
+                user_logs['year_week'] = user_logs['날짜_dt'].dt.isocalendar().year.astype(str) + "-" + user_logs['날짜_dt'].dt.isocalendar().week.astype(str)
+                db_vol_week = user_logs[user_logs['year_week'] == this_yw]['볼륨'].sum()
+
+        # 화면 최상단에 빈 공간(Container)을 먼저 만듭니다. 나중에 수치를 채워넣습니다!
+        vol_dashboard = st.container()
+        st.write("---")
+
         today_logs = []
 
         if 'active_workout' in st.session_state:
@@ -376,20 +451,18 @@ with tab_workout:
 
                     st.write("") 
 
-                                  
                     default_w = workout.get('suggested_weight', 20.0)
                     default_r = workout['target_reps']
                     sets = workout['target_sets']
                     ex_name = workout['name']
                     
-                    # ⭐ 핵심 변경: 매드프로페서 루틴인지 확인
+                    # 매드프로페서 로직: 우선 적용
                     is_madprofessor = "[매드프로페서]" in selected_routine_name
                     
                     if is_madprofessor:
                         st.info(f"🔥 매드프로페서 목표 중량: **{default_w}kg**이 우선 적용되었습니다.")
                         master_weight = default_w
                     else:
-                        # 일반 루틴일 때만 과거 기록을 뒤져서 증량을 제안합니다.
                         past_msg = ""
                         can_increase = False
                         last_weight = default_w
@@ -455,17 +528,22 @@ with tab_workout:
                             reps_val = c3.number_input("횟수", value=default_r, step=1, key=f"r_{w_idx}_{i}", label_visibility="collapsed")
                         
                         done_val = c4.checkbox("완료", key=f"done_{w_idx}_{i}", label_visibility="collapsed")
+                        
+                        # ⭐ 체크박스가 눌려있다면 실시간 볼륨에 더합니다!
+                        if done_val:
+                            current_unsaved_vol += (weight_val * reps_val)
 
                         today_logs.append([
-                            datetime.now().strftime("%Y-%m-%d"),
-                            current_user,
-                            selected_routine_name,
-                            ex_name,
-                            i,
-                            weight_val,
-                            reps_val,
-                            "O" if done_val else "X"
+                            today_str, current_user, selected_routine_name, ex_name, i, weight_val, reps_val, "O" if done_val else "X"
                         ])
+
+            # ⭐ 반복문이 모두 끝나고 계산된 최종 볼륨을, 화면 맨 위에 비워둔 공간(Container)에 쏙 집어넣습니다.
+            with vol_dashboard:
+                st.markdown("### 📈 실시간 볼륨 달성도")
+                vc1, vc2, vc3 = st.columns(3)
+                vc1.metric("오늘", f"{db_vol_today + current_unsaved_vol:,.0f} kg")
+                vc2.metric("이번 주", f"{db_vol_week + current_unsaved_vol:,.0f} kg")
+                vc3.metric("이번 달", f"{db_vol_month + current_unsaved_vol:,.0f} kg")
 
             st.divider()
             if st.button("🚀 오늘 운동 결과 최종 저장하기", type="primary", use_container_width=True):
@@ -474,7 +552,7 @@ with tab_workout:
                         logs_sheet = doc.worksheet("Logs")
                         logs_sheet.append_rows(today_logs)
                         st.success("🎉 구글 시트(Logs)에 데이터가 완벽하게 저장되었습니다!")
-                        get_past_logs.clear() # 운동 기록 저장 후 로그 캐시 초기화
+                        get_past_logs.clear() 
                         st.balloons()
                     except Exception as e:
                         st.error(f"저장 중 오류가 발생했습니다. (에러: {e})")
