@@ -6,60 +6,70 @@ import copy
 import pandas as pd
 import math
 import json
-import os  
+import os
+
+# ==========================================
+# ⭐ 강력한 해결책: 사이드바 수동 동기화 버튼
+# ==========================================
+with st.sidebar:
+    st.subheader("🔄 서버 데이터 동기화")
+    st.caption("구글 시트와 연결이 끊기거나 데이터가 안 보일 때 눌러주세요. (캐시 초기화)")
+    if st.button("앱 초기화 및 새로고침", type="primary", use_container_width=True):
+        st.cache_data.clear()       # 10분 기억 지우기
+        st.cache_resource.clear()   # 구글 연결 초기화
+        st.session_state.clear()    # 화면 상태 초기화
+        st.success("초기화 완료! 데이터를 다시 불러옵니다.")
+        st.rerun()
 
 # ----------------------------------------------------
-# 0. 구글 시트 연결 (50분마다 자동 재인증 적용!)
+# 0. 구글 시트 연결
 # ----------------------------------------------------
-@st.cache_resource(ttl=3000) 
+@st.cache_resource(ttl=3000)
 def init_connection():
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/drive"
-    ]
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     if os.path.exists("secrets.json"):
         creds = ServiceAccountCredentials.from_json_keyfile_name("secrets.json", scope)
     else:
         creds_dict = json.loads(st.secrets["gcp_service_account"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        
     client = gspread.authorize(creds)
     return client.open("운동기록_DB")
 
 doc = init_connection()
 
 # ----------------------------------------------------
-# 1. DB 데이터 불러오기/저장하기 함수
+# 1. DB 데이터 불러오기/저장하기 함수 (안정성 극대화)
 # ----------------------------------------------------
 @st.cache_data(ttl=60)
 def get_past_logs():
     try:
         logs_sheet = doc.worksheet("Logs")
         records = logs_sheet.get_all_records()
-        if not records:
-            return pd.DataFrame()
+        if not records: return pd.DataFrame()
         return pd.DataFrame(records)
     except Exception:
         return pd.DataFrame()
 
-# ⭐ 여기에 캐시를 달아 API 폭격을 막습니다!
-@st.cache_data(ttl=600) 
+@st.cache_data(ttl=600)
 def load_exercises_from_sheet():
     try:
         ex_sheet = doc.worksheet("Exercises")
-        records = ex_sheet.get_all_records()
+        # get_all_records 대신 get_all_values를 써서 빈칸/에러로 인한 튕김 방지!
+        all_data = ex_sheet.get_all_values() 
         ex_dict = {"가슴": [], "등": [], "하체": [], "어깨": [], "팔": [], "복근/코어": [], "유산소": []}
-        for row in records:
-            part = str(row.get("부위", "")).strip()
-            name = str(row.get("종목명", "")).strip()
-            if part in ex_dict and name:
-                ex_dict[part].append(name)
+        if len(all_data) > 1:
+            for row in all_data[1:]:
+                if len(row) >= 2:
+                    part = str(row[0]).strip()
+                    name = str(row[1]).strip()
+                    if part in ex_dict and name:
+                        ex_dict[part].append(name)
         return ex_dict
-    except Exception:
+    except Exception as e:
+        print(f"종목 로드 에러: {e}")
         return None
 
-# ⭐ 여기에도 캐시를 달아줍니다!
-@st.cache_data(ttl=600) 
+@st.cache_data(ttl=600)
 def load_routines_from_sheet():
     try:
         routine_sheet = doc.worksheet("Routines")
@@ -68,14 +78,14 @@ def load_routines_from_sheet():
         if len(all_data) > 1:
             for row in all_data[1:]:
                 if len(row) >= 2:
-                    name = row[0]
-                    data_str = row[1]
+                    name = str(row[0]).strip()
+                    data_str = str(row[1]).strip()
                     if name and data_str:
                         r_dict[name] = json.loads(data_str)
         return r_dict
     except Exception as e:
-        return {}
-
+        print(f"루틴 로드 에러: {e}")
+        return None
 
 def save_routine_to_sheet(routine_name, routine_data):
     try:
@@ -88,18 +98,17 @@ def save_routine_to_sheet(routine_name, routine_data):
             routine_sheet.update_cell(row_idx, 2, data_str)
         else:
             routine_sheet.append_row([routine_name, data_str])
-        
-        # ⭐ [핵심 추가 1] 화면 동기화 및 10분 캐시 강제 초기화!
+            
+        # 저장 후 화면 동기화
         st.session_state.routines[routine_name] = routine_data
         load_routines_from_sheet.clear() 
         
-        # ⭐ [핵심 추가 2] '오늘의 운동' 탭에 띄워둔 루틴을 수정한 거라면 즉시 교체!
         if st.session_state.get('active_routine_name') == routine_name:
             st.session_state.active_workout = copy.deepcopy(routine_data)
             
         return True
     except Exception as e:
-        st.error(f"구글 시트 저장 실패! 관리자에게 문의하세요. (에러: {e})")
+        st.error(f"구글 시트 저장 실패! 1분 뒤 사이드바의 [새로고침]을 누르고 다시 시도하세요. (에러: {e})")
         return False
 
 # ----------------------------------------------------
@@ -117,17 +126,29 @@ def calculate_madprofessor_start_weight(pr_weight, pr_reps, min_plate):
     return round_to_plate(start_weight, min_plate)
 
 # ----------------------------------------------------
-# 3. 앱 세션 초기화 (조건문 엄격하게 수정!)
+# 3. 앱 세션 초기화 (에러 감지 및 복구 기능 포함)
 # ----------------------------------------------------
-if 'exercises' not in st.session_state: 
+if 'exercises' not in st.session_state or st.session_state.exercises is None:
     loaded_ex = load_exercises_from_sheet()
     if loaded_ex:
         st.session_state.exercises = loaded_ex
     else:
-        st.session_state.exercises = {"가슴": ["플랫 벤치프레스"], "등": ["데드리프트"], "하체": ["바벨 스쿼트"]}
+        # 에러 시 나타나는 비상용 데이터
+        st.session_state.exercises = {"가슴": ["플랫 벤치프레스"], "등": ["데드리프트"], "하체": ["바벨 스쿼트"], "어깨": [], "팔": [], "복근/코어": [], "유산소": []}
 
-if 'routines' not in st.session_state: 
-    st.session_state.routines = load_routines_from_sheet()
+if 'routines' not in st.session_state or st.session_state.routines is None:
+    loaded_r = load_routines_from_sheet()
+    if loaded_r is not None:
+        st.session_state.routines = loaded_r
+    else:
+        st.session_state.routines = {}
+
+def get_flat_exercise_list():
+    flat_list = []
+    for category, ex_list in st.session_state.exercises.items():
+        for ex in ex_list:
+            flat_list.append(f"[{category}] {ex}")
+    return flat_list
 
 # ----------------------------------------------------
 # 화면 UI 시작
@@ -168,17 +189,14 @@ with tab_mad:
             {"name": "바벨 로우", "target_sets": 5, "target_reps": 5, "suggested_weight": bp_start * 0.8}
         ]
         routine_name = f"[매드프로페서] 1주차 월요일 ({current_user if current_user else '기본'})"
-        st.session_state.routines[routine_name] = mad_routine
         
         if save_routine_to_sheet(routine_name, mad_routine):
             st.success(f"루틴 생성 완료! 이제 모든 사용자가 이 루틴을 볼 수 있습니다.")
 
 # ==========================================
-# [탭 2] 종목 및 루틴 관리 (복구 및 개선!)
+# [탭 2] 종목 및 루틴 관리
 # ==========================================
 with tab_manage:
-    
-    # ⭐ 누락되었던 [1. 종목 관리] 섹션 완벽 복구
     st.header("1. 종목 관리 (추가 및 삭제)")
     manage_col1, manage_col2 = st.columns(2)
     
@@ -192,6 +210,7 @@ with tab_manage:
                 try:
                     ex_sheet = doc.worksheet("Exercises")
                     ex_sheet.append_row([add_category, new_exercise])
+                    load_exercises_from_sheet.clear()
                     st.success(f"[{add_category}] '{new_exercise}' 추가 완료!")
                 except Exception as e:
                     st.error("구글 시트 저장 실패")
@@ -214,6 +233,7 @@ with tab_manage:
                             break
                     if row_to_delete:
                         ex_sheet.delete_rows(row_to_delete)
+                        load_exercises_from_sheet.clear()
                         st.success(f"'{del_exercise}' 삭제 완료!")
                 except Exception as e:
                     st.error(f"구글 시트 삭제 중 오류 발생: {e}")
@@ -221,7 +241,6 @@ with tab_manage:
         else:
             st.caption("해당 부위에 등록된 종목이 없습니다.")
 
-    # 부위별 종목 리스트 뷰어 복구
     st.write("")
     st.subheader("📋 부위별 등록된 종목 목록 (DB 연동)")
     cols = st.columns(3)
@@ -234,22 +253,16 @@ with tab_manage:
 
     st.divider()
 
-    # ⭐ [2. 새 루틴 만들기] + 슬라이서(부위별 필터링) 기능 추가
     st.header("2. 새 루틴 만들기 (공유됨)")
     new_routine_name = st.text_input("새 루틴 이름", placeholder="예: 월요일 가슴/삼두 루틴")
     
-    # 슬라이서 역할을 하는 다중 선택 필터
-    st.caption("🔍 아래에서 원하는 부위를 먼저 선택하면 종목 찾기가 훨씬 편해집니다!")
-    filter_categories = st.multiselect("부위 필터링 (선택하지 않으면 모든 종목 표시)", list(st.session_state.exercises.keys()))
-    
-    # 필터링 조건에 맞춰 리스트 생성
+    filter_categories = st.multiselect("부위 필터링", list(st.session_state.exercises.keys()))
     filtered_flat_exercise_list = []
     for category, ex_list in st.session_state.exercises.items():
         if not filter_categories or category in filter_categories:
             for ex in ex_list:
                 filtered_flat_exercise_list.append(f"[{category}] {ex}")
                 
-    # 필터링된 리스트만 드롭다운에 표시됨
     selected_exs = st.multiselect("이 루틴에 포함할 운동을 순서대로 고르세요", filtered_flat_exercise_list)
     
     routine_details = []
@@ -264,13 +277,11 @@ with tab_manage:
             
     if st.button("💾 새 루틴 저장 및 공유하기", type="primary", use_container_width=True):
         if new_routine_name and routine_details:
-            st.session_state.routines[new_routine_name] = routine_details
             if save_routine_to_sheet(new_routine_name, routine_details):
                 st.success(f"'{new_routine_name}' 루틴이 DB에 저장되어 모두에게 공유되었습니다!")
 
     st.write("---")
 
-    # [3. 루틴 편집]
     st.header("3. 내 루틴 편집 (순서 변경 및 세부조절)")
     if not st.session_state.routines:
         st.info("등록된 루틴이 없습니다.")
@@ -312,18 +323,20 @@ with tab_manage:
                             save_routine_to_sheet(edit_routine_name, routine_to_edit)
                             st.success("적용됨")
 
-                if st.button("🗑️ 이 루틴 전체 삭제 (DB에서도 삭제됨)", type="secondary", key=f"del_all_{edit_routine_name}"):
-                     del st.session_state.routines[edit_routine_name]
-                try:
-                    sheet = doc.worksheet("Routines")
-                    names_in_sheet = sheet.col_values(1)
-                    
-                    if edit_routine_name in names_in_sheet:
-                        row_idx = names_in_sheet.index(edit_routine_name) + 1
-                        sheet.delete_rows(row_idx)
-                except Exception as e: 
-                    pass
-                st.rerun()
+        if st.button("🗑️ 이 루틴 전체 삭제", type="secondary", key=f"del_all_{edit_routine_name}"):
+            del st.session_state.routines[edit_routine_name]
+            try:
+                sheet = doc.worksheet("Routines")
+                names_in_sheet = sheet.col_values(1)
+                if edit_routine_name in names_in_sheet:
+                    row_idx = names_in_sheet.index(edit_routine_name) + 1
+                    sheet.delete_rows(row_idx)
+            except Exception as e: pass
+            
+            load_routines_from_sheet.clear()
+            if st.session_state.get('active_routine_name') == edit_routine_name:
+                del st.session_state['active_routine_name']
+            st.rerun()
 
 # ==========================================
 # [탭 1] 오늘의 운동 기록 화면
@@ -345,113 +358,114 @@ with tab_workout:
 
         today_logs = []
 
-        for w_idx, workout in enumerate(st.session_state.active_workout):
-            with st.expander(f"🔥 {workout['name']}", expanded=True):
-                
-                ctrl1, ctrl2, ctrl3 = st.columns(3)
-                if ctrl1.button("➕ 1세트 추가", key=f"add_{w_idx}"):
-                    workout['target_sets'] += 1
-                    st.rerun()
-                if ctrl2.button("➖ 1세트 삭제", key=f"sub_{w_idx}") and workout['target_sets'] > 1:
-                    workout['target_sets'] -= 1
-                    st.rerun()
-                if ctrl3.button("✅ 일괄 완료", key=f"all_{w_idx}"):
-                    for i in range(1, workout['target_sets'] + 1):
-                        st.session_state[f"done_{w_idx}_{i}"] = True
-                    st.rerun()
+        if 'active_workout' in st.session_state:
+            for w_idx, workout in enumerate(st.session_state.active_workout):
+                with st.expander(f"🔥 {workout['name']}", expanded=True):
+                    
+                    ctrl1, ctrl2, ctrl3 = st.columns(3)
+                    if ctrl1.button("➕ 1세트 추가", key=f"add_{w_idx}"):
+                        workout['target_sets'] += 1
+                        st.rerun()
+                    if ctrl2.button("➖ 1세트 삭제", key=f"sub_{w_idx}") and workout['target_sets'] > 1:
+                        workout['target_sets'] -= 1
+                        st.rerun()
+                    if ctrl3.button("✅ 일괄 완료", key=f"all_{w_idx}"):
+                        for i in range(1, workout['target_sets'] + 1):
+                            st.session_state[f"done_{w_idx}_{i}"] = True
+                        st.rerun()
 
-                st.write("") 
+                    st.write("") 
 
-                default_w = workout.get('suggested_weight', 20.0)
-                default_r = workout['target_reps']
-                sets = workout['target_sets']
-                ex_name = workout['name']
-                
-                past_msg = ""
-                can_increase = False
-                last_weight = default_w
-                
-                if not past_logs_df.empty and '사용자' in past_logs_df.columns:
-                    past_data = past_logs_df[(past_logs_df['종목'] == ex_name) & (past_logs_df['사용자'] == current_user)]
-                    if not past_data.empty:
-                        last_date = past_data['날짜'].max()
-                        last_session = past_data[past_data['날짜'] == last_date]
-                        
-                        success_count = len(last_session[last_session['완료여부'] == 'O'])
-                        total_count = len(last_session)
-                        last_weight = float(last_session['무게'].iloc[-1])
-                        last_reps = int(last_session['횟수'].iloc[-1])
-                        
-                        past_msg = f"📅 **{current_user}**님의 마지막 기록({last_date}): **{last_weight}kg x {last_reps}회 x {total_count}세트** "
-                        
-                        if success_count == total_count and total_count > 0:
-                            past_msg += "(전 세트 성공! 🌟)"
-                            can_increase = True
-                        else:
-                            past_msg += f"({success_count}/{total_count} 세트 완료)"
-                
-                if can_increase:
-                    st.success(past_msg)
-                    decision = st.radio(
-                        "오늘의 증량 여부를 선택하세요!", 
-                        [f"유지하기 ({last_weight}kg)", f"2.5kg 증량하기 ({last_weight + 2.5}kg)"], 
-                        horizontal=True, key=f"dec_{w_idx}"
-                    )
-                    master_weight = last_weight + 2.5 if "증량하기" in decision else last_weight
-                elif past_msg:
-                    st.info(past_msg + " ➔ 오늘은 동일한 무게로 완벽한 자세에 도전해보세요!")
-                    master_weight = last_weight
-                else:
-                    master_weight = default_w
+                    default_w = workout.get('suggested_weight', 20.0)
+                    default_r = workout['target_reps']
+                    sets = workout['target_sets']
+                    ex_name = workout['name']
+                    
+                    past_msg = ""
+                    can_increase = False
+                    last_weight = default_w
+                    
+                    if not past_logs_df.empty and '사용자' in past_logs_df.columns:
+                        past_data = past_logs_df[(past_logs_df['종목'] == ex_name) & (past_logs_df['사용자'] == current_user)]
+                        if not past_data.empty:
+                            last_date = past_data['날짜'].max()
+                            last_session = past_data[past_data['날짜'] == last_date]
+                            
+                            success_count = len(last_session[last_session['완료여부'] == 'O'])
+                            total_count = len(last_session)
+                            last_weight = float(last_session['무게'].iloc[-1])
+                            last_reps = int(last_session['횟수'].iloc[-1])
+                            
+                            past_msg = f"📅 **{current_user}**님의 마지막 기록({last_date}): **{last_weight}kg x {last_reps}회 x {total_count}세트** "
+                            
+                            if success_count == total_count and total_count > 0:
+                                past_msg += "(전 세트 성공! 🌟)"
+                                can_increase = True
+                            else:
+                                past_msg += f"({success_count}/{total_count} 세트 완료)"
+                    
+                    if can_increase:
+                        st.success(past_msg)
+                        decision = st.radio(
+                            "오늘의 증량 여부를 선택하세요!", 
+                            [f"유지하기 ({last_weight}kg)", f"2.5kg 증량하기 ({last_weight + 2.5}kg)"], 
+                            horizontal=True, key=f"dec_{w_idx}"
+                        )
+                        master_weight = last_weight + 2.5 if "증량하기" in decision else last_weight
+                    elif past_msg:
+                        st.info(past_msg + " ➔ 오늘은 동일한 무게로 완벽한 자세에 도전해보세요!")
+                        master_weight = last_weight
+                    else:
+                        master_weight = default_w
 
-                st.write("") 
-                input_mode = st.radio("입력 모드 선택", ["전체 세트 일괄 설정", "세트별 개별 설정"], horizontal=True, key=f"mode_{w_idx}", label_visibility="collapsed")
-                
-                if input_mode == "전체 세트 일괄 설정":
-                    mc1, mc2 = st.columns(2)
-                    master_weight = mc1.number_input(f"일괄 목표 무게(kg)", value=float(master_weight), step=2.5, key=f"mw_{w_idx}")
-                    master_reps = mc2.number_input(f"일괄 목표 횟수", value=default_r, step=1, key=f"mr_{w_idx}")
-
-                cols = st.columns([1, 2, 2, 1])
-                cols[0].write("세트")
-                cols[1].write("무게")
-                cols[2].write("횟수")
-                cols[3].write("완료")
-
-                for i in range(1, sets + 1):
-                    c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-                    c1.write(f"**{i}**")
+                    st.write("") 
+                    input_mode = st.radio("입력 모드 선택", ["전체 세트 일괄 설정", "세트별 개별 설정"], horizontal=True, key=f"mode_{w_idx}", label_visibility="collapsed")
                     
                     if input_mode == "전체 세트 일괄 설정":
-                        c2.markdown(f"<div style='padding-top:8px;'>{master_weight} kg</div>", unsafe_allow_html=True)
-                        c3.markdown(f"<div style='padding-top:8px;'>{master_reps} 회</div>", unsafe_allow_html=True)
-                        weight_val = master_weight
-                        reps_val = master_reps
-                    else:
-                        weight_val = c2.number_input("무게", value=float(master_weight), step=2.5, key=f"w_{w_idx}_{i}", label_visibility="collapsed")
-                        reps_val = c3.number_input("횟수", value=default_r, step=1, key=f"r_{w_idx}_{i}", label_visibility="collapsed")
-                    
-                    done_val = c4.checkbox("완료", key=f"done_{w_idx}_{i}", label_visibility="collapsed")
+                        mc1, mc2 = st.columns(2)
+                        master_weight = mc1.number_input(f"일괄 목표 무게(kg)", value=float(master_weight), step=2.5, key=f"mw_{w_idx}")
+                        master_reps = mc2.number_input(f"일괄 목표 횟수", value=default_r, step=1, key=f"mr_{w_idx}")
 
-                    today_logs.append([
-                        datetime.now().strftime("%Y-%m-%d"),
-                        current_user,
-                        selected_routine_name,
-                        ex_name,
-                        i,
-                        weight_val,
-                        reps_val,
-                        "O" if done_val else "X"
-                    ])
+                    cols = st.columns([1, 2, 2, 1])
+                    cols[0].write("세트")
+                    cols[1].write("무게")
+                    cols[2].write("횟수")
+                    cols[3].write("완료")
 
-        st.divider()
-        if st.button("🚀 오늘 운동 결과 최종 저장하기", type="primary", use_container_width=True):
-            with st.spinner('구글 시트에 기록을 저장하는 중입니다...'):
-                try:
-                    logs_sheet = doc.worksheet("Logs")
-                    logs_sheet.append_rows(today_logs)
-                    st.success("🎉 구글 시트(Logs)에 데이터가 완벽하게 저장되었습니다!")
-                    st.cache_data.clear() 
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"저장 중 오류가 발생했습니다. 구글 시트의 [Logs] 탭 구조를 확인해주세요. (에러: {e})")
+                    for i in range(1, sets + 1):
+                        c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+                        c1.write(f"**{i}**")
+                        
+                        if input_mode == "전체 세트 일괄 설정":
+                            c2.markdown(f"<div style='padding-top:8px;'>{master_weight} kg</div>", unsafe_allow_html=True)
+                            c3.markdown(f"<div style='padding-top:8px;'>{master_reps} 회</div>", unsafe_allow_html=True)
+                            weight_val = master_weight
+                            reps_val = master_reps
+                        else:
+                            weight_val = c2.number_input("무게", value=float(master_weight), step=2.5, key=f"w_{w_idx}_{i}", label_visibility="collapsed")
+                            reps_val = c3.number_input("횟수", value=default_r, step=1, key=f"r_{w_idx}_{i}", label_visibility="collapsed")
+                        
+                        done_val = c4.checkbox("완료", key=f"done_{w_idx}_{i}", label_visibility="collapsed")
+
+                        today_logs.append([
+                            datetime.now().strftime("%Y-%m-%d"),
+                            current_user,
+                            selected_routine_name,
+                            ex_name,
+                            i,
+                            weight_val,
+                            reps_val,
+                            "O" if done_val else "X"
+                        ])
+
+            st.divider()
+            if st.button("🚀 오늘 운동 결과 최종 저장하기", type="primary", use_container_width=True):
+                with st.spinner('구글 시트에 기록을 저장하는 중입니다...'):
+                    try:
+                        logs_sheet = doc.worksheet("Logs")
+                        logs_sheet.append_rows(today_logs)
+                        st.success("🎉 구글 시트(Logs)에 데이터가 완벽하게 저장되었습니다!")
+                        get_past_logs.clear() # 운동 기록 저장 후 로그 캐시 초기화
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"저장 중 오류가 발생했습니다. (에러: {e})")
