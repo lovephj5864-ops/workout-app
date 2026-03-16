@@ -9,19 +9,16 @@ import json
 import os  
 
 # ----------------------------------------------------
-# 0. 구글 시트 연결
+# 0. 구글 시트 연결 (50분마다 자동 재인증 적용!)
 # ----------------------------------------------------
-@st.cache_resource
+@st.cache_resource(ttl=3000) 
 def init_connection():
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/drive"
     ]
-    
-    # 1. 내 컴퓨터(로컬) 환경: 폴더에 secrets.json 파일이 있다면 그것을 최우선으로 읽습니다.
     if os.path.exists("secrets.json"):
         creds = ServiceAccountCredentials.from_json_keyfile_name("secrets.json", scope)
-    # 2. 클라우드 배포 환경: secrets.json 파일이 없다면 Streamlit 비밀 금고(st.secrets)를 열어봅니다.
     else:
         creds_dict = json.loads(st.secrets["gcp_service_account"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -32,7 +29,7 @@ def init_connection():
 doc = init_connection()
 
 # ----------------------------------------------------
-# 1. DB 데이터 불러오기/저장하기 함수
+# 1. DB 데이터 불러오기/저장하기 함수 (에러 방지 강화)
 # ----------------------------------------------------
 @st.cache_data(ttl=60)
 def get_past_logs():
@@ -59,39 +56,42 @@ def load_exercises_from_sheet():
     except Exception:
         return None
 
+# ⭐ 텅 빈 시트에서도 에러 없이 작동하도록 개선
 def load_routines_from_sheet():
     try:
         routine_sheet = doc.worksheet("Routines")
-        records = routine_sheet.get_all_records()
+        all_data = routine_sheet.get_all_values() # 헤더 제약 없이 전체 데이터를 그냥 가져옴
         r_dict = {}
-        for row in records:
-            name = row.get("루틴이름")
-            data_str = row.get("루틴데이터")
-            if name and data_str:
-                r_dict[name] = json.loads(data_str)
+        
+        if len(all_data) > 1: # 1행(헤더) 외에 데이터가 있을 때만 실행
+            for row in all_data[1:]: # 2행부터 읽기 시작
+                if len(row) >= 2:
+                    name = row[0]
+                    data_str = row[1]
+                    if name and data_str:
+                        r_dict[name] = json.loads(data_str)
         return r_dict
-    except Exception:
+    except Exception as e:
+        st.error(f"루틴 불러오기 에러: {e}")
         return {}
 
 def save_routine_to_sheet(routine_name, routine_data):
     try:
         routine_sheet = doc.worksheet("Routines")
         data_str = json.dumps(routine_data, ensure_ascii=False)
-        
-        # 1열(루틴 이름들)의 데이터를 리스트로 모두 가져옵니다. (에러 발생 안 함)
         names_in_sheet = routine_sheet.col_values(1)
         
         if routine_name in names_in_sheet:
-            # 이미 목록에 이름이 있다면, 몇 번째 줄인지 찾아서 덮어쓰기 (배열은 0부터, 시트는 1부터 시작하므로 +1)
             row_idx = names_in_sheet.index(routine_name) + 1
             routine_sheet.update_cell(row_idx, 2, data_str)
         else:
-            # 목록에 이름이 없다면 맨 아랫줄에 새로 추가하기
             routine_sheet.append_row([routine_name, data_str])
-            
+        
+        # 저장 즉시 세션 상태(화면)도 동기화
+        st.session_state.routines[routine_name] = routine_data
         return True
     except Exception as e:
-        st.error(f"루틴 저장 실패: {e}")
+        st.error(f"구글 시트 저장 실패! 관리자에게 문의하세요. (에러: {e})")
         return False
 
 # ----------------------------------------------------
