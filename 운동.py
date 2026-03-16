@@ -304,8 +304,8 @@ with tab_manage:
                             save_routine_to_sheet(edit_routine_name, routine_to_edit)
                             st.success("적용됨")
 
-            if st.button("🗑️ 이 루틴 전체 삭제 (DB에서도 삭제됨)", type="secondary"):
-                del st.session_state.routines[edit_routine_name]
+                if st.button("🗑️ 이 루틴 전체 삭제 (DB에서도 삭제됨)", type="secondary", key=f"del_all_{edit_routine_name}"):
+                     del st.session_state.routines[edit_routine_name]
                 try:
                     sheet = doc.worksheet("Routines")
                     names_in_sheet = sheet.col_values(1)
