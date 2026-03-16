@@ -89,8 +89,14 @@ def save_routine_to_sheet(routine_name, routine_data):
         else:
             routine_sheet.append_row([routine_name, data_str])
         
-        # 저장 즉시 세션 상태(화면)도 동기화
+        # ⭐ [핵심 추가 1] 화면 동기화 및 10분 캐시 강제 초기화!
         st.session_state.routines[routine_name] = routine_data
+        load_routines_from_sheet.clear() 
+        
+        # ⭐ [핵심 추가 2] '오늘의 운동' 탭에 띄워둔 루틴을 수정한 거라면 즉시 교체!
+        if st.session_state.get('active_routine_name') == routine_name:
+            st.session_state.active_workout = copy.deepcopy(routine_data)
+            
         return True
     except Exception as e:
         st.error(f"구글 시트 저장 실패! 관리자에게 문의하세요. (에러: {e})")
