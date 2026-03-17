@@ -7,6 +7,8 @@ import pandas as pd
 import math
 import json
 import os
+import time  # 타이머용 추가
+import streamlit.components.v1 as components # 부드러운 UI 시계용 추가
 
 # ==========================================
 # ⭐ 사이드바 수동 동기화 버튼
@@ -144,12 +146,11 @@ if 'routines' not in st.session_state or st.session_state.routines is None:
 st.title("🏋️ 플릭 스타일 운동 트래커")
 current_user = st.text_input("👤 사용자 닉네임 입력 (개인 맞춤 증량을 위해 필수)", placeholder="예: 운동매니아1")
 
-# ⭐ 탭 4개로 확장!
 tab_workout, tab_manage, tab_mad, tab_analysis = st.tabs(["💪 오늘의 운동", "⚙️ 종목 및 루틴 관리", "🔥 매드프로페서 5x5", "📊 볼륨 분석"])
 past_logs_df = get_past_logs()
 
 # ==========================================
-# [탭 4] 📊 볼륨 분석 대시보드 (신규 기능!)
+# [탭 4] 📊 볼륨 분석 대시보드 
 # ==========================================
 with tab_analysis:
     st.header("📊 내 볼륨 분석 대시보드")
@@ -158,90 +159,116 @@ with tab_analysis:
     elif past_logs_df.empty or '사용자' not in past_logs_df.columns:
         st.info("아직 저장된 구글 시트 기록이 없습니다.")
     else:
-        # 현재 사용자의 완료된 운동만 필터링
         user_df = past_logs_df[(past_logs_df['사용자'] == current_user) & (past_logs_df['완료여부'] == 'O')].copy()
-        
         if user_df.empty:
             st.info("완료된 운동 기록이 아직 없습니다. 오늘의 운동을 저장해 보세요!")
         else:
-            # 종목을 부위로 맵핑(연결)하기 위한 사전 생성
             ex_to_cat = {}
             for cat, ex_list in st.session_state.exercises.items():
                 for ex in ex_list:
                     ex_to_cat[ex] = cat
             
-            # 볼륨 계산 및 날짜 데이터 정리
             user_df['부위'] = user_df['종목'].map(ex_to_cat).fillna('기타')
             user_df['볼륨'] = user_df['무게'] * user_df['횟수']
             user_df['날짜_dt'] = pd.to_datetime(user_df['날짜'])
             
-            # 검색 필터 UI
             ac1, ac2 = st.columns(2)
             time_filter = ac1.selectbox("기간 단위", ["일간", "주간", "월간"])
             part_filter = ac2.selectbox("부위 선택", ["전체"] + list(st.session_state.exercises.keys()))
             
-            # 부위 필터 적용
             if part_filter != "전체":
                 user_df = user_df[user_df['부위'] == part_filter]
                 
-            # 기간 필터 적용 및 그룹화
             if time_filter == "일간":
                 grouped = user_df.groupby('날짜')['볼륨'].sum().reset_index()
                 x_col = '날짜'
             elif time_filter == "주간":
-                # 연도-주차 형태로 변환 (예: 2024-42주차)
                 user_df['주차'] = user_df['날짜_dt'].dt.isocalendar().year.astype(str) + "년 " + user_df['날짜_dt'].dt.isocalendar().week.astype(str) + "주차"
                 grouped = user_df.groupby('주차')['볼륨'].sum().reset_index()
                 x_col = '주차'
-            else: # 월간
+            else: 
                 user_df['월'] = user_df['날짜_dt'].dt.strftime('%Y년 %m월')
                 grouped = user_df.groupby('월')['볼륨'].sum().reset_index()
                 x_col = '월'
                 
-            # 그래프 그리기
-            st.write("") # 여백
+            st.write("") 
             if grouped.empty:
                 st.warning("선택하신 조건에 해당하는 데이터가 없습니다.")
             else:
                 st.subheader(f"📈 {part_filter} 부위 {time_filter} 볼륨 변화 (kg)")
-                # 막대그래프 출력 (x축: 기간, y축: 볼륨)
                 st.bar_chart(data=grouped.set_index(x_col), use_container_width=True)
-
 
 # ==========================================
 # [탭 3] 매드프로페서 5x5
 # ==========================================
 with tab_mad:
-    st.header("매드프로페서 5x5 자동 루틴 생성")
-    col_plate, col_blank = st.columns(2)
-    min_plate = col_plate.selectbox("가장 가벼운 원판 (kg)", [1.25, 2.5, 5.0], index=0)
+    st.header("🔥 매드프로페서 5x5 (월/수/금) 자동 생성기")
     
+    # ⭐ 주차 선택 기능 추가
+    col_plate, col_week = st.columns(2)
+    min_plate = col_plate.selectbox("가장 가벼운 원판 (kg)", [1.25, 2.5, 5.0], index=0)
+    target_week = col_week.number_input("생성할 주차 (Week)", min_value=1, max_value=12, value=1, step=1)
+    
+    st.write("")
     c1, c2, c3 = st.columns(3)
     with c1:
-        sq_w = st.number_input("스쿼트 무게", value=100.0, step=2.5, key="sq_w")
+        sq_w = st.number_input("스쿼트 무게 (1RM/5RM)", value=100.0, step=2.5, key="sq_w")
         sq_r = st.number_input("스쿼트 횟수", value=5, step=1, key="sq_r")
     with c2:
-        bp_w = st.number_input("벤치 무게", value=70.0, step=2.5, key="bp_w")
+        bp_w = st.number_input("벤치 무게 (1RM/5RM)", value=70.0, step=2.5, key="bp_w")
         bp_r = st.number_input("벤치 횟수", value=5, step=1, key="bp_r")
     with c3:
-        dl_w = st.number_input("데드 무게", value=120.0, step=2.5, key="dl_w")
+        dl_w = st.number_input("데드 무게 (1RM/5RM)", value=120.0, step=2.5, key="dl_w")
         dl_r = st.number_input("데드 횟수", value=5, step=1, key="dl_r")
         
-    if st.button("🚀 매드프로페서 1주차 루틴 생성 & 전체 공유", type="primary", use_container_width=True):
+    if st.button(f"🚀 {target_week}주차 월/수/금 루틴 3개 일괄 생성", type="primary", use_container_width=True):
+        
+        # 1. 1주차 기준 기본 시작 무게 계산
         sq_start = calculate_madprofessor_start_weight(sq_w, sq_r, min_plate)
         bp_start = calculate_madprofessor_start_weight(bp_w, bp_r, min_plate)
         dl_start = calculate_madprofessor_start_weight(dl_w, dl_r, min_plate)
         
-        mad_routine = [
-            {"name": "바벨 스쿼트", "target_sets": 5, "target_reps": 5, "suggested_weight": sq_start},
-            {"name": "플랫 벤치프레스", "target_sets": 5, "target_reps": 5, "suggested_weight": bp_start},
-            {"name": "바벨 로우", "target_sets": 5, "target_reps": 5, "suggested_weight": bp_start * 0.8}
-        ]
-        routine_name = f"[매드프로페서] 1주차 월요일 ({current_user if current_user else '기본'})"
+        # 2. 선택한 주차에 맞춰 점진적 과부하(+2.5kg씩) 자동 추가
+        increment = 2.5 * (target_week - 1)
+        cur_sq = sq_start + increment
+        cur_bp = bp_start + increment
+        cur_dl = dl_start + increment
         
-        if save_routine_to_sheet(routine_name, mad_routine):
-            st.success(f"루틴 생성 완료! 이제 모든 사용자가 이 루틴을 볼 수 있습니다.")
-
+        # 바벨로우와 밀리터리 프레스는 벤치프레스 중량을 기준으로 자동 추정
+        cur_row = round_to_plate(cur_bp * 0.9, min_plate) 
+        cur_ohp = round_to_plate(cur_bp * 0.7, min_plate) 
+        
+        # 🟢 [월요일] 볼륨 훈련 (5x5 탑세트)
+        mon_routine = [
+            {"name": "바벨 스쿼트", "target_sets": 5, "target_reps": 5, "suggested_weight": cur_sq},
+            {"name": "플랫 벤치프레스", "target_sets": 5, "target_reps": 5, "suggested_weight": cur_bp},
+            {"name": "바벨 로우", "target_sets": 5, "target_reps": 5, "suggested_weight": cur_row}
+        ]
+        
+        # 🟡 [수요일] 회복 훈련 (스쿼트는 월요일의 80%, 4세트)
+        wed_routine = [
+            {"name": "바벨 스쿼트", "target_sets": 4, "target_reps": 5, "suggested_weight": round_to_plate(cur_sq * 0.8, min_plate)},
+            {"name": "밀리터리 프레스", "target_sets": 4, "target_reps": 5, "suggested_weight": cur_ohp},
+            {"name": "데드리프트", "target_sets": 4, "target_reps": 5, "suggested_weight": cur_dl}
+        ]
+        
+        # 🔴 [금요일] 강도 훈련 (다음 주차 무게를 3회로 먼저 뚫어보기)
+        fri_routine = [
+            {"name": "바벨 스쿼트", "target_sets": 5, "target_reps": 3, "suggested_weight": cur_sq + 2.5},
+            {"name": "플랫 벤치프레스", "target_sets": 5, "target_reps": 3, "suggested_weight": cur_bp + 2.5},
+            {"name": "바벨 로우", "target_sets": 5, "target_reps": 3, "suggested_weight": cur_row + 2.5}
+        ]
+        
+        user_tag = current_user if current_user else '기본'
+        
+        # 구글 시트에 월/수/금 루틴 3개를 동시에 밀어넣습니다.
+        with st.spinner("월/수/금 루틴을 생성하고 있습니다..."):
+            save_routine_to_sheet(f"[매드프로페서] {target_week}주차 월요일 ({user_tag})", mon_routine)
+            save_routine_to_sheet(f"[매드프로페서] {target_week}주차 수요일 ({user_tag})", wed_routine)
+            save_routine_to_sheet(f"[매드프로페서] {target_week}주차 금요일 ({user_tag})", fri_routine)
+        
+        st.success(f"🎉 {target_week}주차 월, 수, 금 루틴 3개가 완벽하게 생성되었습니다! [오늘의 운동] 탭을 확인하세요.")
+        st.balloons()
 # ==========================================
 # [탭 2] 종목 및 루틴 관리
 # ==========================================
@@ -396,16 +423,30 @@ with tab_workout:
     elif not st.session_state.routines:
         st.warning("등록된 공유 루틴이 없습니다. [종목 및 루틴 관리] 탭에서 루틴을 먼저 만들어주세요!")
     else:
-        selected_routine_name = st.selectbox("루틴 목록 (모든 사용자 공유)", list(st.session_state.routines.keys()), label_visibility="collapsed")
+        # ⭐ 타이머 시작 시간을 저장할 변수 초기화
+        if 'last_completed_time' not in st.session_state:
+            st.session_state.last_completed_time = 0
+
+        # ⭐ 상단 메뉴 (루틴 선택 & 타이머 시간 설정)
+        col_sel, col_rest = st.columns([2, 1])
+        selected_routine_name = col_sel.selectbox("루틴 목록", list(st.session_state.routines.keys()), label_visibility="collapsed")
+        
+        if 'rest_sec_pref' not in st.session_state:
+            st.session_state.rest_sec_pref = 60
+        rest_sec = col_rest.number_input("⏱️ 휴식 (10초 단위)", min_value=0, value=st.session_state.rest_sec_pref, step=10)
+        st.session_state.rest_sec_pref = rest_sec
+
+        # 타이머가 들어갈 공간을 미리 마련해둡니다.
+        timer_container = st.empty()
         
         if 'active_routine_name' not in st.session_state or st.session_state.active_routine_name != selected_routine_name:
             st.session_state.active_routine_name = selected_routine_name
             st.session_state.active_workout = copy.deepcopy(st.session_state.routines[selected_routine_name])
             for key in list(st.session_state.keys()):
-                if key.startswith("done_"):
+                if key.startswith("done_") or key.startswith("prev_done_"):
                     del st.session_state[key]
+            st.session_state.last_completed_time = 0 # 새 루틴 열면 타이머 초기화
 
-        # ⭐ 실시간 볼륨 계산을 위한 변수 및 컨테이너(공간) 예약
         db_vol_today = 0
         db_vol_week = 0
         db_vol_month = 0
@@ -427,7 +468,6 @@ with tab_workout:
                 user_logs['year_week'] = user_logs['날짜_dt'].dt.isocalendar().year.astype(str) + "-" + user_logs['날짜_dt'].dt.isocalendar().week.astype(str)
                 db_vol_week = user_logs[user_logs['year_week'] == this_yw]['볼륨'].sum()
 
-        # 화면 최상단에 빈 공간(Container)을 먼저 만듭니다. 나중에 수치를 채워넣습니다!
         vol_dashboard = st.container()
         st.write("---")
 
@@ -447,6 +487,7 @@ with tab_workout:
                     if ctrl3.button("✅ 일괄 완료", key=f"all_{w_idx}"):
                         for i in range(1, workout['target_sets'] + 1):
                             st.session_state[f"done_{w_idx}_{i}"] = True
+                        st.session_state.last_completed_time = time.time() # 일괄완료 시에도 타이머 시작
                         st.rerun()
 
                     st.write("") 
@@ -456,7 +497,6 @@ with tab_workout:
                     sets = workout['target_sets']
                     ex_name = workout['name']
                     
-                    # 매드프로페서 로직: 우선 적용
                     is_madprofessor = "[매드프로페서]" in selected_routine_name
                     
                     if is_madprofessor:
@@ -527,9 +567,20 @@ with tab_workout:
                             weight_val = c2.number_input("무게", value=float(master_weight), step=2.5, key=f"w_{w_idx}_{i}", label_visibility="collapsed")
                             reps_val = c3.number_input("횟수", value=default_r, step=1, key=f"r_{w_idx}_{i}", label_visibility="collapsed")
                         
-                        done_val = c4.checkbox("완료", key=f"done_{w_idx}_{i}", label_visibility="collapsed")
+                        # ⭐ 체크박스 상태 추적을 통한 타이머 발동 로직
+                        key = f"done_{w_idx}_{i}"
+                        prev_key = f"prev_{key}"
+                        if prev_key not in st.session_state:
+                            st.session_state[prev_key] = False
+                            
+                        done_val = c4.checkbox("완료", key=key, label_visibility="collapsed")
                         
-                        # ⭐ 체크박스가 눌려있다면 실시간 볼륨에 더합니다!
+                        # 만약 방금 '완료'가 체크되었다면? (False -> True)
+                        if done_val and not st.session_state[prev_key]:
+                            st.session_state.last_completed_time = time.time() # 시계 초기화
+                            
+                        st.session_state[prev_key] = done_val
+                        
                         if done_val:
                             current_unsaved_vol += (weight_val * reps_val)
 
@@ -537,13 +588,44 @@ with tab_workout:
                             today_str, current_user, selected_routine_name, ex_name, i, weight_val, reps_val, "O" if done_val else "X"
                         ])
 
-            # ⭐ 반복문이 모두 끝나고 계산된 최종 볼륨을, 화면 맨 위에 비워둔 공간(Container)에 쏙 집어넣습니다.
+            # ==========================================
+            # ⭐ 백그라운드 타이머 & 실시간 볼륨 렌더링
+            # ==========================================
             with vol_dashboard:
                 st.markdown("### 📈 실시간 볼륨 달성도")
                 vc1, vc2, vc3 = st.columns(3)
                 vc1.metric("오늘", f"{db_vol_today + current_unsaved_vol:,.0f} kg")
                 vc2.metric("이번 주", f"{db_vol_week + current_unsaved_vol:,.0f} kg")
                 vc3.metric("이번 달", f"{db_vol_month + current_unsaved_vol:,.0f} kg")
+            
+            # 타이머 화면 최상단 띄우기
+            if st.session_state.last_completed_time > 0 and st.session_state.rest_sec_pref > 0:
+                elapsed = time.time() - st.session_state.last_completed_time
+                if elapsed < st.session_state.rest_sec_pref:
+                    remaining = int(st.session_state.rest_sec_pref - elapsed)
+                    
+                    html_code = f"""
+                    <div style="background-color: rgba(76, 175, 80, 0.1); padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #4CAF50; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        <h3 style="margin:0; color: #4CAF50; font-family: sans-serif;" id="clock">
+                            ⏱️ 휴식 중... 남은 시간: <span style="font-size:1.3em;">{remaining}</span>초
+                        </h3>
+                    </div>
+                    <script>
+                        let time = {remaining};
+                        let el = document.getElementById('clock');
+                        let timer = setInterval(function() {{
+                            time--;
+                            if(time > 0) {{
+                                el.innerHTML = '⏱️ 휴식 중... 남은 시간: <span style="font-size:1.3em;">' + time + '</span>초';
+                            }} else {{
+                                el.innerHTML = '🔔 <span style="color:#d32f2f;">휴식 종료! 다음 세트를 시작하세요!</span> 💪';
+                                clearInterval(timer);
+                            }}
+                        }}, 1000);
+                    </script>
+                    """
+                    with timer_container:
+                        components.html(html_code, height=75)
 
             st.divider()
             if st.button("🚀 오늘 운동 결과 최종 저장하기", type="primary", use_container_width=True):
