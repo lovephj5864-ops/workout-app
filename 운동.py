@@ -358,94 +358,111 @@ with tab_manage:
 
     st.write("---")
 
-    st.header("3. 내 루틴 편집 (순서 변경 및 세부조절)")
+st.header("3. 내 루틴 편집 (순서 변경 및 세부조절)")
     if not st.session_state.routines:
         st.info("등록된 루틴이 없습니다.")
     else:
-        edit_routine_name = st.selectbox("편집할 루틴을 선택하세요", list(st.session_state.routines.keys()))
-        routine_to_edit = st.session_state.routines[edit_routine_name]
+        # ⭐ [핵심 기능] 나에게 보이는 루틴만 걸러내기
+        # 일반 루틴은 다 보여주고, 매드프로페서는 내 이름이 들어간 것만 보여줍니다.
+        visible_manage_routines = [
+            r for r in st.session_state.routines.keys() 
+            if "[매드프로페서]" not in r or (current_user and f"({current_user})" in r)
+        ]
         
-        for i, workout in enumerate(routine_to_edit):
-            st.markdown(f"**{i + 1}. {workout['name']}**")
-            c_up, c_dn, c_del, c_exp = st.columns([1, 1, 1, 6])
+        if not visible_manage_routines:
+            st.info("현재 편집할 수 있는 루틴이 없습니다.")
+        else:
+            edit_routine_name = st.selectbox("편집할 루틴을 선택하세요", visible_manage_routines)
+            routine_to_edit = st.session_state.routines[edit_routine_name]
             
-            with c_up:
-                if st.button("⬆️", key=f"up_{edit_routine_name}_{i}"):
-                    if i > 0:
-                        routine_to_edit[i], routine_to_edit[i-1] = routine_to_edit[i-1], routine_to_edit[i]
-                        save_routine_to_sheet(edit_routine_name, routine_to_edit)
-                        st.rerun()
-            with c_dn:
-                if st.button("⬇️", key=f"dn_{edit_routine_name}_{i}"):
-                    if i < len(routine_to_edit) - 1:
-                        routine_to_edit[i], routine_to_edit[i+1] = routine_to_edit[i+1], routine_to_edit[i]
-                        save_routine_to_sheet(edit_routine_name, routine_to_edit)
-                        st.rerun()
-            with c_del:
-                if st.button("❌", key=f"del_{edit_routine_name}_{i}"):
-                    routine_to_edit.pop(i)
-                    save_routine_to_sheet(edit_routine_name, routine_to_edit)
-                    st.rerun()
-                    
-            with c_exp:
-                with st.expander("세트/횟수 세부 설정", expanded=False):
-                    ec1, ec2 = st.columns(2)
-                    new_sets = ec1.number_input("목표 세트수", min_value=1, value=workout['target_sets'], key=f"esets_{edit_routine_name}_{i}")
-                    new_reps = ec2.number_input("목표 횟수", min_value=1, value=workout['target_reps'], key=f"ereps_{edit_routine_name}_{i}")
-                    if new_sets != workout['target_sets'] or new_reps != workout['target_reps']:
-                        workout['target_sets'] = new_sets
-                        workout['target_reps'] = new_reps
-                        if st.button("세부 설정 적용", key=f"apply_{edit_routine_name}_{i}"):
+            for i, workout in enumerate(routine_to_edit):
+                st.markdown(f"**{i + 1}. {workout['name']}**")
+                c_up, c_dn, c_del, c_exp = st.columns([1, 1, 1, 6])
+                
+                with c_up:
+                    if st.button("⬆️", key=f"up_{edit_routine_name}_{i}"):
+                        if i > 0:
+                            routine_to_edit[i], routine_to_edit[i-1] = routine_to_edit[i-1], routine_to_edit[i]
                             save_routine_to_sheet(edit_routine_name, routine_to_edit)
-                            st.success("적용됨")
+                            st.rerun()
+                with c_dn:
+                    if st.button("⬇️", key=f"dn_{edit_routine_name}_{i}"):
+                        if i < len(routine_to_edit) - 1:
+                            routine_to_edit[i], routine_to_edit[i+1] = routine_to_edit[i+1], routine_to_edit[i]
+                            save_routine_to_sheet(edit_routine_name, routine_to_edit)
+                            st.rerun()
+                with c_del:
+                    if st.button("❌", key=f"del_{edit_routine_name}_{i}"):
+                        routine_to_edit.pop(i)
+                        save_routine_to_sheet(edit_routine_name, routine_to_edit)
+                        st.rerun()
+                        
+                with c_exp:
+                    with st.expander("세트/횟수 세부 설정", expanded=False):
+                        ec1, ec2 = st.columns(2)
+                        new_sets = ec1.number_input("목표 세트수", min_value=1, value=workout['target_sets'], key=f"esets_{edit_routine_name}_{i}")
+                        new_reps = ec2.number_input("목표 횟수", min_value=1, value=workout['target_reps'], key=f"ereps_{edit_routine_name}_{i}")
+                        if new_sets != workout['target_sets'] or new_reps != workout['target_reps']:
+                            workout['target_sets'] = new_sets
+                            workout['target_reps'] = new_reps
+                            if st.button("세부 설정 적용", key=f"apply_{edit_routine_name}_{i}"):
+                                save_routine_to_sheet(edit_routine_name, routine_to_edit)
+                                st.success("적용됨")
 
-        if st.button("🗑️ 이 루틴 전체 삭제", type="secondary", key=f"del_all_{edit_routine_name}"):
-            del st.session_state.routines[edit_routine_name]
-            try:
-                sheet = doc.worksheet("Routines")
-                names_in_sheet = sheet.col_values(1)
-                if edit_routine_name in names_in_sheet:
-                    row_idx = names_in_sheet.index(edit_routine_name) + 1
-                    sheet.delete_rows(row_idx)
-            except Exception as e: pass
-            
-            load_routines_from_sheet.clear()
-            if st.session_state.get('active_routine_name') == edit_routine_name:
-                del st.session_state['active_routine_name']
-            st.rerun()
+            if st.button("🗑️ 이 루틴 전체 삭제", type="secondary", key=f"del_all_{edit_routine_name}"):
+                del st.session_state.routines[edit_routine_name]
+                try:
+                    sheet = doc.worksheet("Routines")
+                    names_in_sheet = sheet.col_values(1)
+                    if edit_routine_name in names_in_sheet:
+                        row_idx = names_in_sheet.index(edit_routine_name) + 1
+                        sheet.delete_rows(row_idx)
+                except Exception as e: pass
+                
+                load_routines_from_sheet.clear()
+                if st.session_state.get('active_routine_name') == edit_routine_name:
+                    del st.session_state['active_routine_name']
+                st.rerun()
 
-# ==========================================
-# [탭 1] 오늘의 운동 기록 화면
-# ==========================================
-with tab_workout:
-    if not current_user:
-        st.warning("⚠️ 상단에 [사용자 닉네임]을 입력하셔야 루틴을 시작하고 개인 기록을 불러올 수 있습니다.")
-    elif not st.session_state.routines:
-        st.warning("등록된 공유 루틴이 없습니다. [종목 및 루틴 관리] 탭에서 루틴을 먼저 만들어주세요!")
-    else:
-        # ⭐ 타이머 시작 시간을 저장할 변수 초기화
-        if 'last_completed_time' not in st.session_state:
-            st.session_state.last_completed_time = 0
-
-        # ⭐ 상단 메뉴 (루틴 선택 & 타이머 시간 설정)
-        col_sel, col_rest = st.columns([2, 1])
-        selected_routine_name = col_sel.selectbox("루틴 목록", list(st.session_state.routines.keys()), label_visibility="collapsed")
-        
-        if 'rest_sec_pref' not in st.session_state:
-            st.session_state.rest_sec_pref = 60
-        rest_sec = col_rest.number_input("⏱️ 휴식 (10초 단위)", min_value=0, value=st.session_state.rest_sec_pref, step=10)
-        st.session_state.rest_sec_pref = rest_sec
-
-        # 타이머가 들어갈 공간을 미리 마련해둡니다.
-        timer_container = st.empty()
-        
-        if 'active_routine_name' not in st.session_state or st.session_state.active_routine_name != selected_routine_name:
-            st.session_state.active_routine_name = selected_routine_name
-            st.session_state.active_workout = copy.deepcopy(st.session_state.routines[selected_routine_name])
-            for key in list(st.session_state.keys()):
-                if key.startswith("done_") or key.startswith("prev_done_"):
-                    del st.session_state[key]
-            st.session_state.last_completed_time = 0 # 새 루틴 열면 타이머 초기화
+    # ==========================================
+    # [탭 1] 오늘의 운동 기록 화면
+    # ==========================================
+    with tab_workout:
+        if not current_user:
+            st.warning("⚠️ 상단에 [사용자 닉네임]을 입력하셔야 루틴을 시작하고 개인 기록을 불러올 수 있습니다.")
+        elif not st.session_state.routines:
+            st.warning("등록된 공유 루틴이 없습니다. [종목 및 루틴 관리] 탭에서 루틴을 먼저 만들어주세요!")
+        else:
+            if 'last_completed_time' not in st.session_state:
+                st.session_state.last_completed_time = 0
+    
+            # ⭐ [핵심 기능] 나에게 보이는 루틴만 걸러내기 (운동 시작 화면)
+            visible_workout_routines = [
+                r for r in st.session_state.routines.keys() 
+                if "[매드프로페서]" not in r or (current_user and f"({current_user})" in r)
+            ]
+    
+            if not visible_workout_routines:
+                st.warning("현재 선택할 수 있는 루틴이 없습니다.")
+            else:
+                col_sel, col_rest = st.columns([2, 1])
+                # 기존의 전체 목록 대신 필터링된 visible_workout_routines를 드롭다운에 넣습니다.
+                selected_routine_name = col_sel.selectbox("루틴 목록", visible_workout_routines, label_visibility="collapsed")
+                
+                if 'rest_sec_pref' not in st.session_state:
+                    st.session_state.rest_sec_pref = 60
+                rest_sec = col_rest.number_input("⏱️ 휴식 (10초 단위)", min_value=0, value=st.session_state.rest_sec_pref, step=10)
+                st.session_state.rest_sec_pref = rest_sec
+    
+                timer_container = st.empty()
+                
+                if 'active_routine_name' not in st.session_state or st.session_state.active_routine_name != selected_routine_name:
+                    st.session_state.active_routine_name = selected_routine_name
+                    st.session_state.active_workout = copy.deepcopy(st.session_state.routines[selected_routine_name])
+                    for key in list(st.session_state.keys()):
+                        if key.startswith("done_") or key.startswith("prev_done_"):
+                            del st.session_state[key]
+                    st.session_state.last_completed_time = 0
 
         db_vol_today = 0
         db_vol_week = 0
