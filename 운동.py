@@ -359,53 +359,53 @@ with tab_manage:
     st.write("---")
 
 st.header("3. 내 루틴 편집 (순서 변경 및 세부조절)")
-    if not st.session_state.routines:
-        st.info("등록된 루틴이 없습니다.")
-    else:
-        # ⭐ [핵심 기능] 나에게 보이는 루틴만 걸러내기
-        # 일반 루틴은 다 보여주고, 매드프로페서는 내 이름이 들어간 것만 보여줍니다.
-        visible_manage_routines = [
-            r for r in st.session_state.routines.keys() 
-            if "[매드프로페서]" not in r or (current_user and f"({current_user})" in r)
-        ]
+if not st.session_state.routines:
+    st.info("등록된 루틴이 없습니다.")
+else:
+    # ⭐ [핵심 기능] 나에게 보이는 루틴만 걸러내기
+    # 일반 루틴은 다 보여주고, 매드프로페서는 내 이름이 들어간 것만 보여줍니다.
+    visible_manage_routines = [
+         r for r in st.session_state.routines.keys() 
+         if "[매드프로페서]" not in r or (current_user and f"({current_user})" in r)
+     ]
         
-        if not visible_manage_routines:
-            st.info("현재 편집할 수 있는 루틴이 없습니다.")
-        else:
-            edit_routine_name = st.selectbox("편집할 루틴을 선택하세요", visible_manage_routines)
-            routine_to_edit = st.session_state.routines[edit_routine_name]
+if not visible_manage_routines:
+        st.info("현재 편집할 수 있는 루틴이 없습니다.")
+else:
+        edit_routine_name = st.selectbox("편집할 루틴을 선택하세요", visible_manage_routines)
+        routine_to_edit = st.session_state.routines[edit_routine_name]
             
-            for i, workout in enumerate(routine_to_edit):
-                st.markdown(f"**{i + 1}. {workout['name']}**")
-                c_up, c_dn, c_del, c_exp = st.columns([1, 1, 1, 6])
+        for i, workout in enumerate(routine_to_edit):
+            st.markdown(f"**{i + 1}. {workout['name']}**")
+            c_up, c_dn, c_del, c_exp = st.columns([1, 1, 1, 6])
                 
-                with c_up:
-                    if st.button("⬆️", key=f"up_{edit_routine_name}_{i}"):
-                        if i > 0:
-                            routine_to_edit[i], routine_to_edit[i-1] = routine_to_edit[i-1], routine_to_edit[i]
-                            save_routine_to_sheet(edit_routine_name, routine_to_edit)
-                            st.rerun()
-                with c_dn:
-                    if st.button("⬇️", key=f"dn_{edit_routine_name}_{i}"):
-                        if i < len(routine_to_edit) - 1:
-                            routine_to_edit[i], routine_to_edit[i+1] = routine_to_edit[i+1], routine_to_edit[i]
-                            save_routine_to_sheet(edit_routine_name, routine_to_edit)
-                            st.rerun()
-                with c_del:
-                    if st.button("❌", key=f"del_{edit_routine_name}_{i}"):
-                        routine_to_edit.pop(i)
+            with c_up:
+                 if st.button("⬆️", key=f"up_{edit_routine_name}_{i}"):
+                      if i > 0:
+                        routine_to_edit[i], routine_to_edit[i-1] = routine_to_edit[i-1], routine_to_edit[i]
                         save_routine_to_sheet(edit_routine_name, routine_to_edit)
                         st.rerun()
+              with c_dn:
+                 if st.button("⬇️", key=f"dn_{edit_routine_name}_{i}"):
+                     if i < len(routine_to_edit) - 1:
+                         routine_to_edit[i], routine_to_edit[i+1] = routine_to_edit[i+1], routine_to_edit[i]
+                         save_routine_to_sheet(edit_routine_name, routine_to_edit)
+                         st.rerun()
+            with c_del:
+                if st.button("❌", key=f"del_{edit_routine_name}_{i}"):
+                     routine_to_edit.pop(i)
+                     save_routine_to_sheet(edit_routine_name, routine_to_edit)
+                     st.rerun()
                         
-                with c_exp:
-                    with st.expander("세트/횟수 세부 설정", expanded=False):
-                        ec1, ec2 = st.columns(2)
-                        new_sets = ec1.number_input("목표 세트수", min_value=1, value=workout['target_sets'], key=f"esets_{edit_routine_name}_{i}")
-                        new_reps = ec2.number_input("목표 횟수", min_value=1, value=workout['target_reps'], key=f"ereps_{edit_routine_name}_{i}")
-                        if new_sets != workout['target_sets'] or new_reps != workout['target_reps']:
-                            workout['target_sets'] = new_sets
-                            workout['target_reps'] = new_reps
-                            if st.button("세부 설정 적용", key=f"apply_{edit_routine_name}_{i}"):
+              with c_exp:
+                 with st.expander("세트/횟수 세부 설정", expanded=False):
+                     ec1, ec2 = st.columns(2)
+                     new_sets = ec1.number_input("목표 세트수", min_value=1, value=workout['target_sets'], key=f"esets_{edit_routine_name}_{i}")
+                     new_reps = ec2.number_input("목표 횟수", min_value=1, value=workout['target_reps'], key=f"ereps_{edit_routine_name}_{i}")
+                      if new_sets != workout['target_sets'] or new_reps != workout['target_reps']:
+                          workout['target_sets'] = new_sets
+                         workout['target_reps'] = new_reps
+                          if st.button("세부 설정 적용", key=f"apply_{edit_routine_name}_{i}"):
                                 save_routine_to_sheet(edit_routine_name, routine_to_edit)
                                 st.success("적용됨")
 
