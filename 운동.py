@@ -208,18 +208,35 @@ with tab_mad:
     min_plate = col_plate.selectbox("가장 가벼운 원판 (kg)", [1.25, 2.5, 5.0], index=0)
     target_week = col_week.number_input("생성할 주차 (Week)", min_value=1, max_value=12, value=1, step=1)
     
-    st.write("")
+    st.write("### 🏋️ 메인 종목 1RM (또는 5RM) 입력")
     c1, c2, c3 = st.columns(3)
     with c1:
-        sq_w = st.number_input("스쿼트 무게 (1RM/5RM)", value=100.0, step=2.5, key="sq_w")
+        sq_w = st.number_input("스쿼트 무게", value=100.0, step=2.5, key="sq_w")
         sq_r = st.number_input("스쿼트 횟수", value=5, step=1, key="sq_r")
     with c2:
-        bp_w = st.number_input("벤치 무게 (1RM/5RM)", value=70.0, step=2.5, key="bp_w")
+        bp_w = st.number_input("벤치 무게", value=70.0, step=2.5, key="bp_w")
         bp_r = st.number_input("벤치 횟수", value=5, step=1, key="bp_r")
     with c3:
-        dl_w = st.number_input("데드 무게 (1RM/5RM)", value=120.0, step=2.5, key="dl_w")
+        dl_w = st.number_input("데드 무게", value=120.0, step=2.5, key="dl_w")
         dl_r = st.number_input("데드 횟수", value=5, step=1, key="dl_r")
+
+    # ⭐ 신규 기능: 요일별 보조운동 선택 UI
+    st.write("---")
+    st.write("### 🛠️ 요일별 보조운동(Accessory) 선택")
+    st.caption("메인 운동 완료 후 수행할 보조운동을 골라주세요. (생성 시 기본 3세트 10회로 자동 추가됩니다.)")
+    
+    # 등록된 모든 종목 리스트 불러오기
+    flat_ex_list = []
+    for category, ex_list in st.session_state.exercises.items():
+        for ex in ex_list:
+            flat_ex_list.append(f"[{category}] {ex}")
+            
+    ac_m, ac_w, ac_f = st.columns(3)
+    mon_acc = ac_m.multiselect("월요일 보조", flat_ex_list, placeholder="예: 백익스텐션, 싯업")
+    wed_acc = ac_w.multiselect("수요일 보조", flat_ex_list, placeholder="예: 싯업")
+    fri_acc = ac_f.multiselect("금요일 보조", flat_ex_list, placeholder="예: 딥스, 바벨 컬")
         
+    st.write("")
     if st.button(f"🚀 {target_week}주차 월/수/금 루틴 3개 일괄 생성", type="primary", use_container_width=True):
         sq_start = calculate_madprofessor_start_weight(sq_w, sq_r, min_plate)
         bp_start = calculate_madprofessor_start_weight(bp_w, bp_r, min_plate)
@@ -233,27 +250,39 @@ with tab_mad:
         cur_row = round_to_plate(cur_bp * 0.9, min_plate) 
         cur_ohp = round_to_plate(cur_bp * 0.7, min_plate) 
         
+        # 1. 메인 루틴 뼈대 세팅
         mon_routine = [
             {"name": "바벨 스쿼트", "target_sets": 5, "target_reps": 5, "suggested_weight": cur_sq},
             {"name": "플랫 벤치프레스", "target_sets": 5, "target_reps": 5, "suggested_weight": cur_bp},
             {"name": "바벨 로우", "target_sets": 5, "target_reps": 5, "suggested_weight": cur_row}
         ]
-        
         wed_routine = [
             {"name": "바벨 스쿼트", "target_sets": 4, "target_reps": 5, "suggested_weight": round_to_plate(cur_sq * 0.8, min_plate)},
             {"name": "밀리터리 프레스", "target_sets": 4, "target_reps": 5, "suggested_weight": cur_ohp},
             {"name": "데드리프트", "target_sets": 4, "target_reps": 5, "suggested_weight": cur_dl}
         ]
-        
         fri_routine = [
             {"name": "바벨 스쿼트", "target_sets": 5, "target_reps": 3, "suggested_weight": cur_sq + 2.5},
             {"name": "플랫 벤치프레스", "target_sets": 5, "target_reps": 3, "suggested_weight": cur_bp + 2.5},
             {"name": "바벨 로우", "target_sets": 5, "target_reps": 3, "suggested_weight": cur_row + 2.5}
         ]
         
+        # 2. 선택한 보조운동을 메인 운동 뒤에 덧붙이기
+        for acc in mon_acc:
+            clean_name = acc.split("] ")[1] if "] " in acc else acc
+            mon_routine.append({"name": clean_name, "target_sets": 3, "target_reps": 10, "suggested_weight": 20.0})
+            
+        for acc in wed_acc:
+            clean_name = acc.split("] ")[1] if "] " in acc else acc
+            wed_routine.append({"name": clean_name, "target_sets": 3, "target_reps": 10, "suggested_weight": 20.0})
+            
+        for acc in fri_acc:
+            clean_name = acc.split("] ")[1] if "] " in acc else acc
+            fri_routine.append({"name": clean_name, "target_sets": 3, "target_reps": 10, "suggested_weight": 20.0})
+
         user_tag = current_user if current_user else '기본'
         
-        with st.spinner("월/수/금 루틴을 생성하고 있습니다..."):
+        with st.spinner("보조운동이 포함된 월/수/금 루틴을 생성하고 있습니다..."):
             save_routine_to_sheet(f"[매드프로페서] {target_week}주차 월요일 ({user_tag})", mon_routine)
             save_routine_to_sheet(f"[매드프로페서] {target_week}주차 수요일 ({user_tag})", wed_routine)
             save_routine_to_sheet(f"[매드프로페서] {target_week}주차 금요일 ({user_tag})", fri_routine)
