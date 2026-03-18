@@ -141,7 +141,7 @@ if 'routines' not in st.session_state or st.session_state.routines is None:
         st.session_state.routines = {}
 
 # ----------------------------------------------------
-# 화면 UI 시작 (에러가 발생했던 탭 정의 부분입니다!)
+# 화면 UI 시작
 # ----------------------------------------------------
 st.title("🏋️ 플릭 스타일 운동 트래커")
 current_user = st.text_input("👤 사용자 닉네임 입력 (개인 맞춤 증량을 위해 필수)", placeholder="예: 운동매니아1")
@@ -150,7 +150,7 @@ tab_workout, tab_manage, tab_mad, tab_analysis = st.tabs(["💪 오늘의 운동
 past_logs_df = get_past_logs()
 
 # ==========================================
-# [탭 4] 📊 볼륨 분석 대시보드
+# [탭 4] 📊 볼륨 분석 대시보드 (+ 달력 기능 추가!)
 # ==========================================
 with tab_analysis:
     st.header("📊 내 볼륨 분석 대시보드")
@@ -172,31 +172,62 @@ with tab_analysis:
             user_df['볼륨'] = user_df['무게'] * user_df['횟수']
             user_df['날짜_dt'] = pd.to_datetime(user_df['날짜'])
             
+            # --- 파트 1: 기간별 볼륨 그래프 ---
+            st.subheader("1. 기간별 볼륨 변화 추이")
             ac1, ac2 = st.columns(2)
             time_filter = ac1.selectbox("기간 단위", ["일간", "주간", "월간"])
             part_filter = ac2.selectbox("부위 선택", ["전체"] + list(st.session_state.exercises.keys()))
             
+            chart_df = user_df.copy()
             if part_filter != "전체":
-                user_df = user_df[user_df['부위'] == part_filter]
+                chart_df = chart_df[chart_df['부위'] == part_filter]
                 
             if time_filter == "일간":
-                grouped = user_df.groupby('날짜')['볼륨'].sum().reset_index()
+                grouped = chart_df.groupby('날짜')['볼륨'].sum().reset_index()
                 x_col = '날짜'
             elif time_filter == "주간":
-                user_df['주차'] = user_df['날짜_dt'].dt.isocalendar().year.astype(str) + "년 " + user_df['날짜_dt'].dt.isocalendar().week.astype(str) + "주차"
-                grouped = user_df.groupby('주차')['볼륨'].sum().reset_index()
+                chart_df['주차'] = chart_df['날짜_dt'].dt.isocalendar().year.astype(str) + "년 " + chart_df['날짜_dt'].dt.isocalendar().week.astype(str) + "주차"
+                grouped = chart_df.groupby('주차')['볼륨'].sum().reset_index()
                 x_col = '주차'
             else: 
-                user_df['월'] = user_df['날짜_dt'].dt.strftime('%Y년 %m월')
-                grouped = user_df.groupby('월')['볼륨'].sum().reset_index()
+                chart_df['월'] = chart_df['날짜_dt'].dt.strftime('%Y년 %m월')
+                grouped = chart_df.groupby('월')['볼륨'].sum().reset_index()
                 x_col = '월'
                 
             st.write("") 
             if grouped.empty:
                 st.warning("선택하신 조건에 해당하는 데이터가 없습니다.")
             else:
-                st.subheader(f"📈 {part_filter} 부위 {time_filter} 볼륨 변화 (kg)")
                 st.bar_chart(data=grouped.set_index(x_col), use_container_width=True)
+
+            st.divider()
+
+            # --- 파트 2: 달력 기반 상세 기록 조회 (신규 추가!) ---
+            st.subheader("2. 📅 날짜별 상세 운동 기록")
+            st.caption("달력에서 날짜를 선택하면 그날 수행한 운동 세부 내역이 출력됩니다.")
+            
+            # 오늘 날짜를 기본값으로 하는 달력 위젯
+            selected_date = st.date_input("조회할 날짜를 선택하세요", datetime.now().date())
+            selected_date_str = selected_date.strftime("%Y-%m-%d")
+            
+            # 선택한 날짜의 데이터만 걸러내기
+            day_df = user_df[user_df['날짜'] == selected_date_str]
+            
+            if day_df.empty:
+                st.info(f"{selected_date_str}에는 완료된 운동 기록이 없습니다. 휴식일이었거나 아직 기록 전이네요! 🛌")
+            else:
+                st.success(f"**[{selected_date_str}] 총 볼륨: {day_df['볼륨'].sum():,.0f} kg**")
+                
+                # 종목, 무게, 횟수가 완전히 동일한 행(세트)들을 묶어서 개수(세트 수)를 셉니다.
+                summary_df = day_df.groupby(['종목', '무게', '횟수']).size().reset_index(name='세트수')
+                
+                # 보기 좋게 출력
+                for _, row in summary_df.iterrows():
+                    ex_name = row['종목']
+                    weight = row['무게']
+                    reps = row['횟수']
+                    sets = row['세트수']
+                    st.markdown(f"- **{ex_name}** : {weight}kg × {reps}회 × {sets}세트")
 
 # ==========================================
 # [탭 3] 매드프로페서 5x5 (엑셀 완벽 연동)
@@ -236,7 +267,6 @@ with tab_mad:
     
     st.markdown("**🟦 [월요일] 보조 2개 선택 (등, 코어/복근)**")
     mc1, mc2 = st.columns(2)
-    # 구글 시트에 없는 종목이 선택될 경우를 대비해 에러 방지 처리
     default_mon_back = "펜들레이로우" if "펜들레이로우" in acc_dict["등"] else acc_dict["등"][0]
     default_mon_core = "플랭크" if "플랭크" in acc_dict["코어/복근"] else acc_dict["코어/복근"][0]
     mon_back = mc1.selectbox("등 (월요일)", acc_dict["등"], index=acc_dict["등"].index(default_mon_back))
