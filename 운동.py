@@ -17,11 +17,51 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="운동 트래커", layout="centered")
 st.markdown("""
 <style>
-    /* 스마트폰에서 화면 좌우 테두리 여백을 최소화하여 표가 들어갈 자리 확보 */
     .block-container {
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
         padding-top: 1rem !important;
+    }
+    @media (max-width: 768px) {
+        div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 0.1rem !important; 
+            align-items: center !important;
+        }
+        div[data-testid="column"] {
+            min-width: 0 !important;
+            padding: 0 1px !important; 
+        }
+        div[data-testid="stNumberInputContainer"] {
+            padding: 0px 2px !important;
+            min-height: 2rem !important;
+        }
+        input[type="number"] {
+            font-size: 14px !important;
+            padding: 0px !important;
+            text-align: center !important;
+        }
+        button[data-testid="stNumberInputStepUp"], button[data-testid="stNumberInputStepDown"] {
+            padding: 0px 4px !important;
+        }
+        button {
+            padding: 0.2rem 0.1rem !important;
+            font-size: 12px !important;
+            min-height: 0px !important;
+            width: 100% !important;
+        }
+        div[data-testid="stCheckbox"] {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            padding-top: 5px !important;
+        }
+        .stMarkdown p {
+            font-size: 13px !important;
+            text-align: center !important;
+            margin-bottom: 0px !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -324,7 +364,7 @@ with tab_mad:
         st.success(f"🎉 생성 완료!")
 
 # ==========================================
-# ⭐ [복구완료!! 탭 2] 종목 및 루틴 관리
+# ⭐ [복구 및 모바일 정렬 완벽 반영!] 종목 및 루틴 관리
 # ==========================================
 with tab_manage:
     st.header("1. 종목 관리 (추가 및 삭제)")
@@ -428,37 +468,40 @@ with tab_manage:
             
             for i, workout in enumerate(routine_to_edit):
                 st.markdown(f"**{i + 1}. {workout['name']}**")
-                c_up, c_dn, c_del, c_exp = st.columns([1, 1, 1, 6])
+                
+                # ⭐ 핵심 수정: 위/아래/삭제 버튼 3개를 먼저 한 줄에 깔끔하게 배치합니다!
+                c_up, c_dn, c_del, c_empty = st.columns([1, 1, 1, 3])
                 
                 with c_up:
-                    if st.button("⬆️", key=f"up_{edit_routine_name}_{i}"):
+                    if st.button("⬆️", key=f"up_{edit_routine_name}_{i}", use_container_width=True):
                         if i > 0:
                             routine_to_edit[i], routine_to_edit[i-1] = routine_to_edit[i-1], routine_to_edit[i]
                             save_routine_to_sheet(edit_routine_name, routine_to_edit)
                             st.rerun()
                 with c_dn:
-                    if st.button("⬇️", key=f"dn_{edit_routine_name}_{i}"):
+                    if st.button("⬇️", key=f"dn_{edit_routine_name}_{i}", use_container_width=True):
                         if i < len(routine_to_edit) - 1:
                             routine_to_edit[i], routine_to_edit[i+1] = routine_to_edit[i+1], routine_to_edit[i]
                             save_routine_to_sheet(edit_routine_name, routine_to_edit)
                             st.rerun()
                 with c_del:
-                    if st.button("❌", key=f"del_{edit_routine_name}_{i}"):
+                    if st.button("❌", key=f"del_{edit_routine_name}_{i}", use_container_width=True):
                         routine_to_edit.pop(i)
                         save_routine_to_sheet(edit_routine_name, routine_to_edit)
                         st.rerun()
                         
-                with c_exp:
-                    with st.expander("세트/횟수 세부 설정", expanded=False):
-                        ec1, ec2 = st.columns(2)
-                        new_sets = ec1.number_input("목표 세트수", min_value=1, value=workout['target_sets'], key=f"esets_{edit_routine_name}_{i}")
-                        new_reps = ec2.number_input("목표 횟수", min_value=1, value=workout['target_reps'], key=f"ereps_{edit_routine_name}_{i}")
-                        if new_sets != workout['target_sets'] or new_reps != workout['target_reps']:
-                            workout['target_sets'] = new_sets
-                            workout['target_reps'] = new_reps
-                            if st.button("세부 설정 적용", key=f"apply_{edit_routine_name}_{i}"):
-                                save_routine_to_sheet(edit_routine_name, routine_to_edit)
-                                st.success("적용됨")
+                # ⭐ 핵심 수정: 익스팬더(세부 설정)를 컬럼 바깥으로 빼서 화면을 꽉 차게 씁니다!
+                with st.expander("⚙️ 세트/횟수 조절", expanded=False):
+                    ec1, ec2 = st.columns(2)
+                    new_sets = ec1.number_input("목표 세트수", min_value=1, value=workout['target_sets'], key=f"esets_{edit_routine_name}_{i}")
+                    new_reps = ec2.number_input("목표 횟수", min_value=1, value=workout['target_reps'], key=f"ereps_{edit_routine_name}_{i}")
+                    if new_sets != workout['target_sets'] or new_reps != workout['target_reps']:
+                        workout['target_sets'] = new_sets
+                        workout['target_reps'] = new_reps
+                        if st.button("적용하기", key=f"apply_{edit_routine_name}_{i}", use_container_width=True):
+                            save_routine_to_sheet(edit_routine_name, routine_to_edit)
+                            st.success("적용됨")
+                st.write("") # 종목간 띄어쓰기
 
             if st.button("🗑️ 이 루틴 전체 삭제", type="secondary", key=f"del_all_{edit_routine_name}"):
                 del st.session_state.routines[edit_routine_name]
@@ -474,6 +517,21 @@ with tab_manage:
                 if st.session_state.get('active_routine_name') == edit_routine_name:
                     del st.session_state['active_routine_name']
                 st.rerun()
+
+# ==========================================
+# [탭 1 전용] 실시간 동기화 콜백 함수들
+# ==========================================
+def apply_increment(idx, base_w, num_sets):
+    inc = st.session_state[f"inc_{idx}"]
+    target = float(base_w) + float(inc)
+    st.session_state[f"mw_{idx}"] = target
+    for i in range(1, num_sets + 1):
+        st.session_state[f"w_{idx}_{i}"] = target
+
+def sync_bulk_weight(idx, num_sets):
+    bw = st.session_state[f"mw_{idx}"]
+    for i in range(1, num_sets + 1):
+        st.session_state[f"w_{idx}_{i}"] = bw
 
 # ==========================================
 # [탭 1] 오늘의 운동 기록 화면
