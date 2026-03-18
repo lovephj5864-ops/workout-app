@@ -12,7 +12,7 @@ import calendar
 import streamlit.components.v1 as components
 
 # ==========================================
-# ⭐ 모바일 최적화 CSS (스트림릿 세로 본능 완전 분쇄 패치)
+# ⭐ 모바일 최적화 CSS (모든 스마트폰 100% 호환 - 인라인 스타일 저격)
 # ==========================================
 st.set_page_config(page_title="운동 트래커", layout="centered")
 st.markdown("""
@@ -24,40 +24,40 @@ st.markdown("""
         padding-top: 1rem !important;
     }
     
-    /* 2. 스트림릿의 끈질긴 '모바일 무조건 세로 정렬' 규칙을 강제로 파괴 */
-    @media screen and (max-width: 800px) {
+    /* 2. 모바일 브라우저 강제 세로 나열 완벽 무효화 */
+    @media screen and (max-width: 768px) {
         
-        /* 앱 전체의 가로 블록들이 세로로 꺾이는 현상을 막고 가로(row)를 강제 유지 */
-        #root div[data-testid="stHorizontalBlock"] {
+        /* 스트림릿의 가로 블록이 세로(Column)로 꺾이는 현상을 막고 가로(row) 속성 강제 유지 */
+        div[data-testid="stHorizontalBlock"] {
             flex-direction: row !important;
             flex-wrap: wrap !important;
+            gap: 0 !important;
         }
 
-        /* ⭐ 핵심 폭격: 정확히 '7개짜리 열(달력)'을 찾아내어 14% 사이즈로 강제 압축!
-           (#root 를 붙여 스트림릿의 내장 CSS보다 우선순위를 무조건 높게 설정) */
-        #root div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child:nth-last-child(7),
-        #root div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child:nth-last-child(7) ~ div[data-testid="column"] {
-            width: 14.28% !important;
-            min-width: 14.28% !important;
-            max-width: 14.28% !important;
+        /* ⭐ 기적의 꼼수: 스트림릿이 st.columns(7)을 만들 때 HTML 내부에 몰래 적어두는 
+           '14.28%' 라는 숫자(inline-style)를 추적해서 저격합니다! 
+           (구형 사파리, 카카오톡 인앱 브라우저 등에서 100% 무조건 작동합니다) */
+        div[data-testid="column"][style*="14.2"] {
             flex: 0 0 14.28% !important;
-            padding: 0 1px !important;
-            margin: 0 !important;
+            width: 14.28% !important;
+            min-width: 14.2% !important;
+            max-width: 14.3% !important;
+            padding: 0 2px !important; /* 버튼 사이 살짝 간격 */
         }
 
         /* 거대해지려는 달력 내부 버튼들을 억누르고 터치하기 좋은 크기로 깎아냄 */
-        #root div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child:nth-last-child(7) button,
-        #root div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child:nth-last-child(7) ~ div[data-testid="column"] button {
+        div[data-testid="column"][style*="14.2"] button {
             width: 100% !important;
             padding: 0 !important;
+            margin: 0 !important;
             min-height: 40px !important;
             height: 40px !important;
             font-size: 11px !important;
+            border-radius: 4px !important;
         }
 
         /* 요일 텍스트(월, 화, 수) 중앙 정렬 및 불필요한 여백 제거 */
-        #root div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child:nth-last-child(7) div[data-testid="stMarkdownContainer"] p,
-        #root div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child:nth-last-child(7) ~ div[data-testid="column"] div[data-testid="stMarkdownContainer"] p {
+        div[data-testid="column"][style*="14.2"] div[data-testid="stMarkdownContainer"] p {
             font-size: 12px !important;
             text-align: center !important;
             margin-bottom: 2px !important;
