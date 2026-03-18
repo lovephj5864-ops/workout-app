@@ -8,7 +8,7 @@ import math
 import json
 import os
 import time
-import calendar  # ⭐ 커스텀 달력을 그리기 위해 추가된 모듈!
+import calendar
 import streamlit.components.v1 as components
 
 # ==========================================
@@ -110,9 +110,6 @@ def save_routine_to_sheet(routine_name, routine_data):
         st.error(f"구글 시트 저장 실패! 1분 뒤 사이드바의 [새로고침]을 누르고 다시 시도하세요.")
         return False
 
-# ----------------------------------------------------
-# 2. 매드프로페서 중량 계산 함수
-# ----------------------------------------------------
 def round_to_plate(weight, min_plate):
     step = min_plate * 2
     return round(weight / step) * step
@@ -125,7 +122,7 @@ def calculate_madprofessor_start_weight(pr_weight, pr_reps, min_plate):
     return round_to_plate(start_weight, min_plate)
 
 # ----------------------------------------------------
-# 3. 앱 세션 초기화
+# 앱 세션 초기화
 # ----------------------------------------------------
 if 'exercises' not in st.session_state or st.session_state.exercises is None:
     loaded_ex = load_exercises_from_sheet()
@@ -173,7 +170,6 @@ with tab_analysis:
             user_df['볼륨'] = user_df['무게'] * user_df['횟수']
             user_df['날짜_dt'] = pd.to_datetime(user_df['날짜'])
             
-            # --- 파트 1: 기간별 막대그래프 ---
             st.subheader("1. 기간별 볼륨 변화 추이")
             ac1, ac2 = st.columns(2)
             time_filter = ac1.selectbox("기간 단위", ["일간", "주간", "월간"])
@@ -203,52 +199,40 @@ with tab_analysis:
 
             st.divider()
 
-            # --- 파트 2: 📅 커스텀 출석 달력 (신규 기능!) ---
             st.subheader("2. 📅 내 운동 출석부")
             st.caption("달력에 🔥 표시가 있는 날짜를 클릭하면 상세 기록이 나타납니다.")
 
-            # 오늘 날짜 초기화
             now = datetime.now()
             if 'sel_date' not in st.session_state:
                 st.session_state.sel_date = now.strftime("%Y-%m-%d")
 
-            # 연도 및 월 선택 드롭다운 (상단 메뉴)
             cal_c1, cal_c2, _ = st.columns([1, 1, 2])
             sel_y = cal_c1.selectbox("연도", range(now.year - 1, now.year + 2), index=1)
             sel_m = cal_c2.selectbox("월", range(1, 13), index=now.month - 1)
 
-            # 이번 달에 운동을 1번이라도 완료한 날짜(day) 추출
             month_df = user_df[(user_df['날짜_dt'].dt.year == sel_y) & (user_df['날짜_dt'].dt.month == sel_m)]
             worked_out_days = month_df['날짜_dt'].dt.day.unique().tolist()
 
-            # 바둑판 달력 그리기 준비
             cal_matrix = calendar.monthcalendar(sel_y, sel_m)
             weekdays = ["월", "화", "수", "목", "금", "토", "일"]
 
-            # 요일 헤더 그리기
             cols = st.columns(7)
             for i, day_name in enumerate(weekdays):
-                color = "red" if i == 6 else ("blue" if i == 5 else "#555") # 주말 색상 포인트
+                color = "red" if i == 6 else ("blue" if i == 5 else "#555") 
                 cols[i].markdown(f"<div style='text-align: center; font-weight: bold; color: {color};'>{day_name}</div>", unsafe_allow_html=True)
 
-            # 1~31일 날짜 버튼 그리기
             for week in cal_matrix:
                 cols = st.columns(7)
                 for i, day in enumerate(week):
                     if day == 0:
-                        cols[i].write("") # 해당 월에 없는 빈 칸 처리
+                        cols[i].write("") 
                     else:
-                        # 운동한 날이면 숫자 옆에 불꽃 마크 추가!
                         marker = " 🔥" if day in worked_out_days else ""
                         btn_label = f"{day}{marker}"
-
-                        # 버튼을 클릭하면 아래쪽 상세 정보가 업데이트 됨
                         if cols[i].button(btn_label, key=f"cal_{sel_y}_{sel_m}_{day}", use_container_width=True):
                             st.session_state.sel_date = f"{sel_y}-{sel_m:02d}-{day:02d}"
 
             st.write("---")
-
-            # 선택된 날짜의 상세 기록 출력 공간
             st.subheader(f"🔍 {st.session_state.sel_date} 운동 상세 내역")
             day_df = user_df[user_df['날짜'] == st.session_state.sel_date]
 
@@ -256,10 +240,7 @@ with tab_analysis:
                 st.info("이날은 완료된 운동 기록이 없습니다. 휴식일이었거나 기록 전이네요! 🛌")
             else:
                 st.success(f"**총 볼륨: {day_df['볼륨'].sum():,.0f} kg**")
-                
-                # 종목, 무게, 횟수가 동일한 세트들을 예쁘게 하나로 묶기
                 summary_df = day_df.groupby(['종목', '무게', '횟수']).size().reset_index(name='세트수')
-                
                 for _, row in summary_df.iterrows():
                     st.markdown(f"- **{row['종목']}** : {row['무게']}kg × {row['횟수']}회 × {row['세트수']}세트")
 
@@ -288,7 +269,6 @@ with tab_mad:
 
     st.write("---")
     st.write("### 🛠️ 요일별 보조운동(Accessory) 선택")
-    st.caption("엑셀 시트와 동일하게 부위별 리스트가 반영되어 있습니다. (생성 시 기본 3~4세트로 자동 세팅됩니다.)")
     
     acc_dict = {
         "이두": ["바벨 이두컬", "이지바 이두컬", "덤벨 이두컬", "해머컬", "프리처컬"],
@@ -326,7 +306,6 @@ with tab_mad:
     fri_post = fc2.selectbox("후면사슬", acc_dict["후면사슬"], index=acc_dict["후면사슬"].index(default_fri_post))
 
     if st.button(f"🚀 {target_week}주차 월/수/금 맞춤형 루틴 생성", type="primary", use_container_width=True):
-        
         sq_start = calculate_madprofessor_start_weight(sq_w, sq_r, min_plate)
         bp_start = calculate_madprofessor_start_weight(bp_w, bp_r, min_plate)
         dl_start = calculate_madprofessor_start_weight(dl_w, dl_r, min_plate)
@@ -367,7 +346,6 @@ with tab_mad:
             save_routine_to_sheet(f"[매드프로페서] {target_week}주차 금요일 ({user_tag})", fri_routine)
         
         st.success(f"🎉 {target_week}주차 요일별 커스텀 보조운동 루틴 생성 완료! [오늘의 운동] 탭을 확인하세요.")
-        st.balloons()
 
 # ==========================================
 # [탭 2] 종목 및 루틴 관리
@@ -389,7 +367,7 @@ with tab_manage:
                     load_exercises_from_sheet.clear()
                     st.success(f"[{add_category}] '{new_exercise}' 추가 완료!")
                 except Exception as e:
-                    st.error("구글 시트 저장 실패")
+                    pass
                 st.rerun()
                 
     with manage_col2:
@@ -410,9 +388,8 @@ with tab_manage:
                     if row_to_delete:
                         ex_sheet.delete_rows(row_to_delete)
                         load_exercises_from_sheet.clear()
-                        st.success(f"'{del_exercise}' 삭제 완료!")
                 except Exception as e:
-                    st.error("구글 시트 삭제 중 오류 발생")
+                    pass
                 st.rerun()
         else:
             st.caption("해당 부위에 등록된 종목이 없습니다.")
@@ -523,6 +500,23 @@ with tab_manage:
                 st.rerun()
 
 # ==========================================
+# ⭐ [탭 1 전용] 실시간 동기화 콜백 함수들
+# ==========================================
+def apply_increment(idx, base_w, num_sets):
+    # 입력한 증량치를 가져와서 일괄 무게 및 세부 세트 무게를 즉시 업데이트
+    inc = st.session_state[f"inc_{idx}"]
+    target = float(base_w) + float(inc)
+    st.session_state[f"mw_{idx}"] = target
+    for i in range(1, num_sets + 1):
+        st.session_state[f"w_{idx}_{i}"] = target
+
+def sync_bulk_weight(idx, num_sets):
+    # 일괄 목표 무게를 조작하면, 하단의 개별 세트 무게들도 다 함께 변경
+    bw = st.session_state[f"mw_{idx}"]
+    for i in range(1, num_sets + 1):
+        st.session_state[f"w_{idx}_{i}"] = bw
+
+# ==========================================
 # [탭 1] 오늘의 운동 기록 화면
 # ==========================================
 with tab_workout:
@@ -552,11 +546,12 @@ with tab_workout:
 
             timer_container = st.empty()
             
+            # 루틴을 변경하면 예전 루틴에 남아있던 무게 기록(세션)을 완전히 청소합니다.
             if 'active_routine_name' not in st.session_state or st.session_state.active_routine_name != selected_routine_name:
                 st.session_state.active_routine_name = selected_routine_name
                 st.session_state.active_workout = copy.deepcopy(st.session_state.routines[selected_routine_name])
                 for key in list(st.session_state.keys()):
-                    if key.startswith("done_") or key.startswith("prev_done_"):
+                    if key.startswith("done_") or key.startswith("prev_done_") or key.startswith("mw_") or key.startswith("w_") or key.startswith("inc_") or key.startswith("mr_"):
                         del st.session_state[key]
                 st.session_state.last_completed_time = 0 
 
@@ -614,7 +609,10 @@ with tab_workout:
                         
                         if is_madprofessor:
                             st.info(f"🔥 매드프로페서 목표 중량: **{default_w}kg**이 우선 적용되었습니다.")
-                            master_weight = default_w
+                            if f"mw_{w_idx}" not in st.session_state:
+                                st.session_state[f"mw_{w_idx}"] = float(default_w)
+                                for i in range(1, sets + 1):
+                                    st.session_state[f"w_{w_idx}_{i}"] = float(default_w)
                         else:
                             past_msg = ""
                             can_increase = False
@@ -639,27 +637,48 @@ with tab_workout:
                                     else:
                                         past_msg += f"({success_count}/{total_count} 세트 완료)"
                             
+                            # ⭐ 증량 UX 대폭 개선 부분
                             if can_increase:
                                 st.success(past_msg)
-                                decision = st.radio(
-                                    "오늘의 증량 여부를 선택하세요!", 
-                                    [f"유지하기 ({last_weight}kg)", f"2.5kg 증량하기 ({last_weight + 2.5}kg)"], 
-                                    horizontal=True, key=f"dec_{w_idx}"
+                                if f"inc_{w_idx}" not in st.session_state:
+                                    st.session_state[f"inc_{w_idx}"] = 2.5
+                                    
+                                st.number_input(
+                                    "📈 오늘 증량할 무게(kg)를 입력하세요 (유지하려면 0)", 
+                                    step=1.25, 
+                                    key=f"inc_{w_idx}",
+                                    on_change=apply_increment,
+                                    args=(w_idx, last_weight, sets)
                                 )
-                                master_weight = last_weight + 2.5 if "증량하기" in decision else last_weight
+                                
+                                if f"mw_{w_idx}" not in st.session_state:
+                                    initial_w = last_weight + st.session_state[f"inc_{w_idx}"]
+                                    st.session_state[f"mw_{w_idx}"] = float(initial_w)
+                                    for i in range(1, sets + 1):
+                                        st.session_state[f"w_{w_idx}_{i}"] = float(initial_w)
+                                        
                             elif past_msg:
                                 st.info(past_msg + " ➔ 오늘은 동일한 무게로 완벽한 자세에 도전해보세요!")
-                                master_weight = last_weight
+                                if f"mw_{w_idx}" not in st.session_state:
+                                    st.session_state[f"mw_{w_idx}"] = float(last_weight)
+                                    for i in range(1, sets + 1):
+                                        st.session_state[f"w_{w_idx}_{i}"] = float(last_weight)
                             else:
-                                master_weight = default_w
+                                if f"mw_{w_idx}" not in st.session_state:
+                                    st.session_state[f"mw_{w_idx}"] = float(default_w)
+                                    for i in range(1, sets + 1):
+                                        st.session_state[f"w_{w_idx}_{i}"] = float(default_w)
 
                         st.write("") 
                         input_mode = st.radio("입력 모드 선택", ["전체 세트 일괄 설정", "세트별 개별 설정"], horizontal=True, key=f"mode_{w_idx}", label_visibility="collapsed")
                         
                         if input_mode == "전체 세트 일괄 설정":
                             mc1, mc2 = st.columns(2)
-                            master_weight = mc1.number_input(f"일괄 목표 무게(kg)", value=float(master_weight), step=2.5, key=f"mw_{w_idx}")
-                            master_reps = mc2.number_input(f"일괄 목표 횟수", value=default_r, step=1, key=f"mr_{w_idx}")
+                            mc1.number_input("일괄 목표 무게(kg)", step=2.5, key=f"mw_{w_idx}", on_change=sync_bulk_weight, args=(w_idx, sets))
+                            
+                            if f"mr_{w_idx}" not in st.session_state:
+                                st.session_state[f"mr_{w_idx}"] = default_r
+                            mc2.number_input("일괄 목표 횟수", step=1, key=f"mr_{w_idx}")
 
                         cols = st.columns([1, 2, 2, 1])
                         cols[0].write("세트")
@@ -668,16 +687,20 @@ with tab_workout:
                         cols[3].write("완료")
 
                         for i in range(1, sets + 1):
+                            # 세트가 도중에 추가될 경우 기본값 방어
+                            if f"w_{w_idx}_{i}" not in st.session_state:
+                                st.session_state[f"w_{w_idx}_{i}"] = st.session_state.get(f"mw_{w_idx}", float(default_w))
+                                
                             c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
                             c1.write(f"**{i}**")
                             
                             if input_mode == "전체 세트 일괄 설정":
-                                c2.markdown(f"<div style='padding-top:8px;'>{master_weight} kg</div>", unsafe_allow_html=True)
-                                c3.markdown(f"<div style='padding-top:8px;'>{master_reps} 회</div>", unsafe_allow_html=True)
-                                weight_val = master_weight
-                                reps_val = master_reps
+                                c2.markdown(f"<div style='padding-top:8px;'>{st.session_state[f'mw_{w_idx}']} kg</div>", unsafe_allow_html=True)
+                                c3.markdown(f"<div style='padding-top:8px;'>{st.session_state.get(f'mr_{w_idx}', default_r)} 회</div>", unsafe_allow_html=True)
+                                weight_val = st.session_state[f'mw_{w_idx}']
+                                reps_val = st.session_state.get(f'mr_{w_idx}', default_r)
                             else:
-                                weight_val = c2.number_input("무게", value=float(master_weight), step=2.5, key=f"w_{w_idx}_{i}", label_visibility="collapsed")
+                                weight_val = c2.number_input("무게", step=2.5, key=f"w_{w_idx}_{i}", label_visibility="collapsed")
                                 reps_val = c3.number_input("횟수", value=default_r, step=1, key=f"r_{w_idx}_{i}", label_visibility="collapsed")
                             
                             key = f"done_{w_idx}_{i}"
