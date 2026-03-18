@@ -14,9 +14,6 @@ import streamlit.components.v1 as components
 # ==========================================
 # ⭐ 모바일 최적화 CSS (독소 코드 제거 & 달력만 핀셋 적용)
 # ==========================================
-# ==========================================
-# ⭐ 모바일 최적화 CSS (독소 코드 제거 & 달력만 핀셋 적용)
-# ==========================================
 st.set_page_config(page_title="운동 트래커", layout="centered")
 st.markdown("""
 <style>
@@ -27,29 +24,38 @@ st.markdown("""
         padding-top: 1rem !important;
     }
     
-    /* 2. 📅 달력 위젯(7열) 전용 가로 고정 (화면 밖으로 나가는 현상 완벽 해결) */
+    /* 2. 📅 달력 위젯(7열) 가로 강제 고정 및 간격 최소화 */
     div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) {
+        display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        gap: 3px !important; /* 열 사이 기본 간격을 대폭 줄임 */
-        width: 100% !important; /* 화면 너비에 딱 맞춤 */
+        width: 100% !important;
+        gap: 2px !important;
     }
+    
+    /* 🔥 핵심 해결: 모바일에서 버튼이 100%로 커지는 것을 막고 정확히 1/7(14.28%)로 강제 고정 */
     div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) > div[data-testid="column"] {
-        min-width: 0 !important;
-        width: calc(100% / 7) !important; /* 정확하게 7등분 */
-        flex: 1 1 0% !important;
+        width: 14.28% !important; 
+        min-width: 14.28% !important;
+        max-width: 14.28% !important;
+        flex: 0 0 14.28% !important;
         padding: 0 !important;
     }
+    
+    /* 버튼 내부 여백 완벽 제거 및 터치하기 좋은 최소 높이 설정 */
     div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) button {
-        padding: 0 !important; /* 버튼 내부 여백 완전 제거 */
+        padding: 0 !important;
         margin: 0 !important;
-        font-size: 11px !important;
-        min-height: 38px !important; /* 터치하기 편한 최소 높이 보장 */
-        height: 38px !important;
         width: 100% !important;
+        min-height: 38px !important;
+        height: 38px !important;
+        font-size: 11px !important;
     }
+    
+    /* 요일 텍스트(월,화,수...) 크기 및 여백 최적화 */
     div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) div[data-testid="stMarkdownContainer"] p {
-        font-size: 12px !important; /* 요일 글자 크기 최적화 */
+        font-size: 12px !important;
+        margin-bottom: 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
