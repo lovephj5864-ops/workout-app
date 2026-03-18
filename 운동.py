@@ -8,6 +8,7 @@ import math
 import json
 import os
 import time
+import calendar  # ⭐ 커스텀 달력을 그리기 위해 추가된 모듈!
 import streamlit.components.v1 as components
 
 # ==========================================
@@ -150,10 +151,10 @@ tab_workout, tab_manage, tab_mad, tab_analysis = st.tabs(["💪 오늘의 운동
 past_logs_df = get_past_logs()
 
 # ==========================================
-# [탭 4] 📊 볼륨 분석 대시보드 (+ 달력 기능 추가!)
+# [탭 4] 📊 볼륨 분석 대시보드 (+ 커스텀 달력 📅)
 # ==========================================
 with tab_analysis:
-    st.header("📊 내 볼륨 분석 대시보드")
+    st.header("📊 내 볼륨 분석 및 출석부")
     if not current_user:
         st.warning("상단에 사용자 닉네임을 입력하셔야 데이터를 분석할 수 있습니다.")
     elif past_logs_df.empty or '사용자' not in past_logs_df.columns:
@@ -172,7 +173,7 @@ with tab_analysis:
             user_df['볼륨'] = user_df['무게'] * user_df['횟수']
             user_df['날짜_dt'] = pd.to_datetime(user_df['날짜'])
             
-            # --- 파트 1: 기간별 볼륨 그래프 ---
+            # --- 파트 1: 기간별 막대그래프 ---
             st.subheader("1. 기간별 볼륨 변화 추이")
             ac1, ac2 = st.columns(2)
             time_filter = ac1.selectbox("기간 단위", ["일간", "주간", "월간"])
@@ -202,32 +203,66 @@ with tab_analysis:
 
             st.divider()
 
-            # --- 파트 2: 달력 기반 상세 기록 조회 (신규 추가!) ---
-            st.subheader("2. 📅 날짜별 상세 운동 기록")
-            st.caption("달력에서 날짜를 선택하면 그날 수행한 운동 세부 내역이 출력됩니다.")
-            
-            # 오늘 날짜를 기본값으로 하는 달력 위젯
-            selected_date = st.date_input("조회할 날짜를 선택하세요", datetime.now().date())
-            selected_date_str = selected_date.strftime("%Y-%m-%d")
-            
-            # 선택한 날짜의 데이터만 걸러내기
-            day_df = user_df[user_df['날짜'] == selected_date_str]
-            
+            # --- 파트 2: 📅 커스텀 출석 달력 (신규 기능!) ---
+            st.subheader("2. 📅 내 운동 출석부")
+            st.caption("달력에 🔥 표시가 있는 날짜를 클릭하면 상세 기록이 나타납니다.")
+
+            # 오늘 날짜 초기화
+            now = datetime.now()
+            if 'sel_date' not in st.session_state:
+                st.session_state.sel_date = now.strftime("%Y-%m-%d")
+
+            # 연도 및 월 선택 드롭다운 (상단 메뉴)
+            cal_c1, cal_c2, _ = st.columns([1, 1, 2])
+            sel_y = cal_c1.selectbox("연도", range(now.year - 1, now.year + 2), index=1)
+            sel_m = cal_c2.selectbox("월", range(1, 13), index=now.month - 1)
+
+            # 이번 달에 운동을 1번이라도 완료한 날짜(day) 추출
+            month_df = user_df[(user_df['날짜_dt'].dt.year == sel_y) & (user_df['날짜_dt'].dt.month == sel_m)]
+            worked_out_days = month_df['날짜_dt'].dt.day.unique().tolist()
+
+            # 바둑판 달력 그리기 준비
+            cal_matrix = calendar.monthcalendar(sel_y, sel_m)
+            weekdays = ["월", "화", "수", "목", "금", "토", "일"]
+
+            # 요일 헤더 그리기
+            cols = st.columns(7)
+            for i, day_name in enumerate(weekdays):
+                color = "red" if i == 6 else ("blue" if i == 5 else "#555") # 주말 색상 포인트
+                cols[i].markdown(f"<div style='text-align: center; font-weight: bold; color: {color};'>{day_name}</div>", unsafe_allow_html=True)
+
+            # 1~31일 날짜 버튼 그리기
+            for week in cal_matrix:
+                cols = st.columns(7)
+                for i, day in enumerate(week):
+                    if day == 0:
+                        cols[i].write("") # 해당 월에 없는 빈 칸 처리
+                    else:
+                        # 운동한 날이면 숫자 옆에 불꽃 마크 추가!
+                        marker = " 🔥" if day in worked_out_days else ""
+                        btn_label = f"{day}{marker}"
+
+                        # 버튼을 클릭하면 아래쪽 상세 정보가 업데이트 됨
+                        if cols[i].button(btn_label, key=f"cal_{sel_y}_{sel_m}_{day}", use_container_width=True):
+                            st.session_state.sel_date = f"{sel_y}-{sel_m:02d}-{day:02d}"
+
+            st.write("---")
+
+            # 선택된 날짜의 상세 기록 출력 공간
+            st.subheader(f"🔍 {st.session_state.sel_date} 운동 상세 내역")
+            day_df = user_df[user_df['날짜'] == st.session_state.sel_date]
+
             if day_df.empty:
-                st.info(f"{selected_date_str}에는 완료된 운동 기록이 없습니다. 휴식일이었거나 아직 기록 전이네요! 🛌")
+                st.info("이날은 완료된 운동 기록이 없습니다. 휴식일이었거나 기록 전이네요! 🛌")
             else:
-                st.success(f"**[{selected_date_str}] 총 볼륨: {day_df['볼륨'].sum():,.0f} kg**")
+                st.success(f"**총 볼륨: {day_df['볼륨'].sum():,.0f} kg**")
                 
-                # 종목, 무게, 횟수가 완전히 동일한 행(세트)들을 묶어서 개수(세트 수)를 셉니다.
+                # 종목, 무게, 횟수가 동일한 세트들을 예쁘게 하나로 묶기
                 summary_df = day_df.groupby(['종목', '무게', '횟수']).size().reset_index(name='세트수')
                 
-                # 보기 좋게 출력
                 for _, row in summary_df.iterrows():
-                    ex_name = row['종목']
-                    weight = row['무게']
-                    reps = row['횟수']
-                    sets = row['세트수']
-                    st.markdown(f"- **{ex_name}** : {weight}kg × {reps}회 × {sets}세트")
+                    st.markdown(f"- **{row['종목']}** : {row['무게']}kg × {row['횟수']}회 × {row['세트수']}세트")
+
 
 # ==========================================
 # [탭 3] 매드프로페서 5x5 (엑셀 완벽 연동)
