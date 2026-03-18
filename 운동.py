@@ -14,46 +14,44 @@ import streamlit.components.v1 as components
 # ==========================================
 # ⭐ 모바일 최적화 CSS (독소 코드 제거 & 달력만 핀셋 적용)
 # ==========================================
+# ==========================================
+# ⭐ 모바일 최적화 CSS (독소 코드 제거 & 달력만 핀셋 적용)
+# ==========================================
 st.set_page_config(page_title="운동 트래커", layout="centered")
 st.markdown("""
 <style>
-    /* 1. 스마트폰 화면 좌우 낭비되는 여백만 깔끔하게 축소 */
+    /* 1. 스마트폰 화면 좌우 낭비되는 여백 깔끔하게 축소 */
     .block-container {
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
         padding-top: 1rem !important;
     }
     
-    /* 2. 📅 달력 위젯(7열) 가로 강제 고정 및 간격 최소화 */
-    div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        width: 100% !important;
-        gap: 2px !important;
-    }
-    
-    /* 🔥 핵심 해결: 모바일에서 버튼이 100%로 커지는 것을 막고 정확히 1/7(14.28%)로 강제 고정 */
-    div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) > div[data-testid="column"] {
-        width: 14.28% !important; 
-        min-width: 14.28% !important;
+    /* 2. 📅 [핵심 해결] 모바일 100% 팽창 강제 차단 및 7등분 고정 */
+    /* st.columns(7)로 만들어진 '정확히 7개짜리 열'만 찾아내서 세로로 쌓이는 것을 원천 봉쇄함 */
+    div[data-testid="column"]:nth-child(1):nth-last-child(7),
+    div[data-testid="column"]:nth-child(1):nth-last-child(7) ~ div[data-testid="column"] {
+        width: 14.28% !important;
+        min-width: 10% !important;
         max-width: 14.28% !important;
-        flex: 0 0 14.28% !important;
-        padding: 0 !important;
+        flex: 1 1 14.28% !important;
+        padding: 0 1px !important;
     }
-    
-    /* 버튼 내부 여백 완벽 제거 및 터치하기 좋은 최소 높이 설정 */
-    div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) button {
+
+    /* 3. 달력 내부 버튼 크기 최적화 (거대해지는 것 방지) */
+    div[data-testid="column"]:nth-child(1):nth-last-child(7) button,
+    div[data-testid="column"]:nth-child(1):nth-last-child(7) ~ div[data-testid="column"] button {
         padding: 0 !important;
-        margin: 0 !important;
-        width: 100% !important;
-        min-height: 38px !important;
-        height: 38px !important;
+        min-height: 40px !important;
+        height: 40px !important;
         font-size: 11px !important;
+        width: 100% !important;
+        margin: 0 !important;
     }
     
-    /* 요일 텍스트(월,화,수...) 크기 및 여백 최적화 */
-    div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) div[data-testid="stMarkdownContainer"] p {
+    /* 4. 요일 텍스트(월,화,수...) 여백 최소화 */
+    div[data-testid="column"]:nth-child(1):nth-last-child(7) div[data-testid="stMarkdownContainer"] p,
+    div[data-testid="column"]:nth-child(1):nth-last-child(7) ~ div[data-testid="column"] div[data-testid="stMarkdownContainer"] p {
         font-size: 12px !important;
         margin-bottom: 0 !important;
     }
