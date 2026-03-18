@@ -12,52 +12,16 @@ import calendar
 import streamlit.components.v1 as components
 
 # ==========================================
-# ⭐ 모바일 최적화 CSS (달력을 완벽한 '표' 형식으로 강제 변환)
+# ⭐ 모바일 최적화 CSS (지저분한 코드 모두 삭제하고 깔끔한 여백만 남김)
 # ==========================================
 st.set_page_config(page_title="운동 트래커", layout="centered")
 st.markdown("""
 <style>
-    /* 1. 화면 좌우 여백 축소 */
+    /* 스마트폰 화면 좌우 낭비되는 여백만 깔끔하게 축소 */
     .block-container {
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
         padding-top: 1rem !important;
-    }
-    
-    /* 2. 📅 7열 달력을 '표(Table)'처럼 한 줄로 강제 고정 */
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important; /* 밑으로 떨어짐 절대 방지 */
-        gap: 2px !important;
-        width: 100% !important;
-    }
-
-    /* ⭐ 핵심 타격 1: 기둥(Column)이 무조건 줄어들 수 있도록 스트림릿 방어막 해제 */
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) > div[data-testid="column"] {
-        width: calc(100% / 7) !important;
-        flex: 1 1 0% !important;
-        min-width: 0 !important; /* ← 이게 없어서 여태 안 줄어들었던 겁니다! */
-        padding: 0 !important;
-    }
-
-    /* ⭐ 핵심 타격 2: 달력 버튼들도 덩치 고집을 버리고 기둥 크기에 맞춰 다이어트 */
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) button {
-        width: 100% !important;
-        min-width: 0 !important; /* ← 버튼 최소 너비 파괴! */
-        padding: 0 !important;
-        margin: 0 !important;
-        height: 38px !important;
-        min-height: 38px !important;
-    }
-
-    /* 달력 내부 텍스트(요일, 숫자, 불꽃) 크기 및 줄바꿈 최적화 */
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) button p,
-    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) div[data-testid="stMarkdownContainer"] p {
-        font-size: 11px !important;
-        margin: 0 !important;
-        text-align: center !important;
-        word-break: keep-all !important; /* 글자 쪼개짐 방지 */
     }
 </style>
 """, unsafe_allow_html=True)
@@ -69,7 +33,7 @@ with st.sidebar:
     st.subheader("🔄 서버 데이터 동기화")
     st.caption("구글 시트와 연결이 끊기거나 데이터가 안 보일 때 눌러주세요.")
     if st.button("앱 초기화 및 새로고침", type="primary", use_container_width=True):
-        st.cache_data.clear()       
+        st.cache_data.clear()        
         st.cache_resource.clear()   
         st.session_state.clear()    
         st.success("초기화 완료! 데이터를 다시 불러옵니다.")
@@ -190,7 +154,7 @@ tab_workout, tab_manage, tab_mad, tab_analysis = st.tabs(["💪 오늘의 운동
 past_logs_df = get_past_logs()
 
 # ==========================================
-# [탭 4] 📊 볼륨 분석 대시보드
+# [탭 4] 📊 볼륨 분석 대시보드 (표 형식 달력 완벽 적용)
 # ==========================================
 with tab_analysis:
     st.header("📊 내 볼륨 분석 및 출석부")
@@ -237,12 +201,12 @@ with tab_analysis:
                 st.bar_chart(data=grouped.set_index(x_col), use_container_width=True)
 
             st.divider()
-            st.subheader("2. 📅 내 운동 출석부")
+            
+            # ⭐ 2. 내 운동 출석부 (표 형식)
+            st.subheader("2. 📅 내 운동 출석부 (월별 요약)")
             now = datetime.now()
-            if 'sel_date' not in st.session_state:
-                st.session_state.sel_date = now.strftime("%Y-%m-%d")
 
-            cal_c1, cal_c2, _ = st.columns([1, 1, 2])
+            cal_c1, cal_c2 = st.columns(2)
             sel_y = cal_c1.selectbox("연도", range(now.year - 1, now.year + 2), index=1)
             sel_m = cal_c2.selectbox("월", range(1, 13), index=now.month - 1)
 
@@ -251,28 +215,41 @@ with tab_analysis:
             cal_matrix = calendar.monthcalendar(sel_y, sel_m)
             weekdays = ["월", "화", "수", "목", "금", "토", "일"]
 
-            # 🚨 핀셋 고정된 달력 영역
-            cols = st.columns(7)
-            for i, day_name in enumerate(weekdays):
-                color = "red" if i == 6 else ("blue" if i == 5 else "#555") 
-                cols[i].markdown(f"<div style='text-align: center; font-weight: bold; color: {color};'>{day_name}</div>", unsafe_allow_html=True)
-
+            # 🔥 달력을 표(Dataframe) 데이터로 변환 (모바일에서 안 깨짐!)
+            cal_table = []
             for week in cal_matrix:
-                cols = st.columns(7)
+                row_data = {}
                 for i, day in enumerate(week):
-                    if day != 0:
+                    if day == 0:
+                        row_data[weekdays[i]] = ""
+                    else:
                         marker = " 🔥" if day in worked_out_days else ""
-                        if cols[i].button(f"{day}{marker}", key=f"cal_{sel_y}_{sel_m}_{day}", use_container_width=True):
-                            st.session_state.sel_date = f"{sel_y}-{sel_m:02d}-{day:02d}"
+                        row_data[weekdays[i]] = f"{day}{marker}"
+                cal_table.append(row_data)
+
+            df_cal = pd.DataFrame(cal_table)
+
+            # 스트림릿 표 형식으로 깔끔하게 출력 (모바일 자동 맞춤)
+            st.dataframe(
+                df_cal,
+                hide_index=True,
+                use_container_width=True,
+            )
 
             st.write("---")
-            st.subheader(f"🔍 {st.session_state.sel_date} 운동 상세 내역")
+            
+            # ⭐ 상세 조회를 스마트폰 네이티브 날짜 선택기로 변경
+            st.subheader("🔍 상세 기록 조회")
+            st.caption("아래 달력 위젯을 눌러 원하시는 날짜를 선택하세요.")
+            selected_date = st.date_input("날짜 선택", value=now)
+            st.session_state.sel_date = selected_date.strftime("%Y-%m-%d")
+
             day_df = user_df[user_df['날짜'] == st.session_state.sel_date]
 
             if day_df.empty:
-                st.info("이날은 완료된 운동 기록이 없습니다.")
+                st.info(f"{st.session_state.sel_date} - 이날은 완료된 운동 기록이 없습니다.")
             else:
-                st.success(f"**총 볼륨: {day_df['볼륨'].sum():,.0f} kg**")
+                st.success(f"**{st.session_state.sel_date} 총 볼륨: {day_df['볼륨'].sum():,.0f} kg**")
                 summary_df = day_df.groupby(['종목', '무게', '횟수']).size().reset_index(name='세트수')
                 for _, row in summary_df.iterrows():
                     st.markdown(f"- **{row['종목']}** : {row['무게']}kg × {row['횟수']}회 × {row['세트수']}세트")
@@ -674,46 +651,46 @@ with tab_workout:
                                 current_unsaved_vol += (row["무게"] * row["횟수"])
                             today_logs.append([today_str, current_user, selected_routine_name, ex_name, int(row["세트"]), float(row["무게"]), int(row["횟수"]), "O" if row["완료"] else "X"])
 
-                with vol_dashboard:
-                    st.markdown("### 📈 실시간 볼륨 달성도")
-                    vc1, vc2, vc3 = st.columns(3)
-                    vc1.metric("오늘", f"{db_vol_today + current_unsaved_vol:,.0f} kg")
-                    vc2.metric("이번 주", f"{db_vol_week + current_unsaved_vol:,.0f} kg")
-                    vc3.metric("이번 달", f"{db_vol_month + current_unsaved_vol:,.0f} kg")
-                
-                if st.session_state.last_completed_time > 0 and st.session_state.rest_sec_pref > 0:
-                    elapsed = time.time() - st.session_state.last_completed_time
-                    if elapsed < st.session_state.rest_sec_pref:
-                        remaining = int(st.session_state.rest_sec_pref - elapsed)
-                        html_code = f"""
-                        <div style="background-color: rgba(76, 175, 80, 0.1); padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #4CAF50; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                            <h3 style="margin:0; color: #4CAF50; font-family: sans-serif;" id="clock">⏱️ 휴식 중... 남은 시간: <span style="font-size:1.3em;">{remaining}</span>초</h3>
-                        </div>
-                        <script>
-                            let time = {remaining};
-                            let el = document.getElementById('clock');
-                            let timer = setInterval(function() {{
-                                time--;
-                                if(time > 0) {{
-                                    el.innerHTML = '⏱️ 휴식 중... 남은 시간: <span style="font-size:1.3em;">' + time + '</span>초';
-                                }} else {{
-                                    el.innerHTML = '🔔 <span style="color:#d32f2f;">휴식 종료! 다음 세트를 시작하세요!</span> 💪';
-                                    clearInterval(timer);
-                                }}
-                            }}, 1000);
-                        </script>
-                        """
-                        with timer_container:
-                            components.html(html_code, height=75)
+            with vol_dashboard:
+                st.markdown("### 📈 실시간 볼륨 달성도")
+                vc1, vc2, vc3 = st.columns(3)
+                vc1.metric("오늘", f"{db_vol_today + current_unsaved_vol:,.0f} kg")
+                vc2.metric("이번 주", f"{db_vol_week + current_unsaved_vol:,.0f} kg")
+                vc3.metric("이번 달", f"{db_vol_month + current_unsaved_vol:,.0f} kg")
+            
+            if st.session_state.last_completed_time > 0 and st.session_state.rest_sec_pref > 0:
+                elapsed = time.time() - st.session_state.last_completed_time
+                if elapsed < st.session_state.rest_sec_pref:
+                    remaining = int(st.session_state.rest_sec_pref - elapsed)
+                    html_code = f"""
+                    <div style="background-color: rgba(76, 175, 80, 0.1); padding: 12px; border-radius: 8px; text-align: center; border: 2px solid #4CAF50; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        <h3 style="margin:0; color: #4CAF50; font-family: sans-serif;" id="clock">⏱️ 휴식 중... 남은 시간: <span style="font-size:1.3em;">{remaining}</span>초</h3>
+                    </div>
+                    <script>
+                        let time = {remaining};
+                        let el = document.getElementById('clock');
+                        let timer = setInterval(function() {{
+                            time--;
+                            if(time > 0) {{
+                                el.innerHTML = '⏱️ 휴식 중... 남은 시간: <span style="font-size:1.3em;">' + time + '</span>초';
+                            }} else {{
+                                el.innerHTML = '🔔 <span style="color:#d32f2f;">휴식 종료! 다음 세트를 시작하세요!</span> 💪';
+                                clearInterval(timer);
+                            }}
+                        }}, 1000);
+                    </script>
+                    """
+                    with timer_container:
+                        components.html(html_code, height=75)
 
-                st.divider()
-                if st.button("🚀 오늘 운동 결과 최종 저장하기", type="primary", use_container_width=True):
-                    with st.spinner('저장 중...'):
-                        try:
-                            logs_sheet = doc.worksheet("Logs")
-                            logs_sheet.append_rows(today_logs)
-                            st.success("🎉 저장 완료!")
-                            get_past_logs.clear() 
-                            st.balloons()
-                        except:
-                            st.error("저장 실패!")
+            st.divider()
+            if st.button("🚀 오늘 운동 결과 최종 저장하기", type="primary", use_container_width=True):
+                with st.spinner('저장 중...'):
+                    try:
+                        logs_sheet = doc.worksheet("Logs")
+                        logs_sheet.append_rows(today_logs)
+                        st.success("🎉 저장 완료!")
+                        get_past_logs.clear() 
+                        st.balloons()
+                    except:
+                        st.error("저장 실패!")
