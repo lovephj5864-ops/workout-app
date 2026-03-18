@@ -166,8 +166,8 @@ if 'routines' not in st.session_state or st.session_state.routines is None:
 # ----------------------------------------------------
 # 화면 UI 시작
 # ----------------------------------------------------
-st.title("🏋️ 플릭 스타일 운동 트래커")
-current_user = st.text_input("👤 사용자 닉네임 입력", placeholder="예: 급수_지역_번호")
+st.title("🏋️ 운동해라 돼지들아")
+current_user = st.text_input("👤 사용자 닉네임 입력", placeholder="예: 블루효개미")
 
 tab_workout, tab_manage, tab_mad, tab_analysis = st.tabs(["💪 오늘의 운동", "⚙️ 종목 및 루틴 관리", "🔥 매드프로페서", "📊 볼륨 분석"])
 past_logs_df = get_past_logs()
@@ -301,7 +301,7 @@ with tab_analysis:
                         state_key = f"day_edit_state_{s_date}"
                         
                         # ⭐ [개선 3] 커스텀 체크박스 제거 & num_rows="dynamic"으로 기본 기능 활용
-                        edited_day_df = st.data_editor(
+                        day_df = st.data_editor(
                             edit_df,
                             num_rows="dynamic",
                             use_container_width=True,
