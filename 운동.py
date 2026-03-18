@@ -12,6 +12,63 @@ import calendar
 import streamlit.components.v1 as components
 
 # ==========================================
+# ⭐ 모바일 화면 초밀착 UI 강제 주입 (가장 중요!)
+# ==========================================
+st.markdown("""
+<style>
+    /* 폰 화면(768px 이하)에서 여백을 극단적으로 없애고 꽉 채우기 */
+    @media (max-width: 768px) {
+        /* 가로 배치 유지 & 컬럼 사이 간격(Gap) 최소화 */
+        div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 0.1rem !important; 
+            align-items: center !important;
+        }
+        /* 개별 칸(컬럼)의 좌우 낭비되는 여백 완전 제거 */
+        div[data-testid="column"] {
+            min-width: 0 !important;
+            padding: 0 1px !important; 
+        }
+        /* 숫자 입력창 뚱뚱한 여백 다이어트 */
+        div[data-testid="stNumberInputContainer"] {
+            padding: 0px 2px !important;
+            min-height: 2rem !important;
+        }
+        input[type="number"] {
+            font-size: 14px !important;
+            padding: 0px !important;
+            text-align: center !important;
+        }
+        /* 플러스/마이너스 조절 버튼 크기 축소 */
+        button[data-testid="stNumberInputStepUp"], button[data-testid="stNumberInputStepDown"] {
+            padding: 0px 4px !important;
+        }
+        /* 1세트 추가/삭제 등 버튼을 작고 타이트하게 */
+        button {
+            padding: 0.2rem 0.1rem !important;
+            font-size: 12px !important;
+            min-height: 0px !important;
+            width: 100% !important;
+        }
+        /* 체크박스 완벽한 중앙 정렬 */
+        div[data-testid="stCheckbox"] {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            padding-top: 5px !important;
+        }
+        /* 표 제목 글씨 중앙 정렬 및 크기 축소 */
+        .stMarkdown p {
+            font-size: 13px !important;
+            text-align: center !important;
+            margin-bottom: 0px !important;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ==========================================
 # ⭐ 사이드바 수동 동기화 버튼
 # ==========================================
 with st.sidebar:
@@ -142,37 +199,6 @@ if 'routines' not in st.session_state or st.session_state.routines is None:
 # 화면 UI 시작
 # ----------------------------------------------------
 st.title("🏋️ 플릭 스타일 운동 트래커")
-
-# ==========================================
-# ⭐ 모바일 화면 최적화 CSS 강제 주입 (새로 추가됨!)
-# ==========================================
-st.markdown("""
-<style>
-    /* 폰 화면(768px 이하)에서 컬럼이 세로로 깨지는 현상 방지 */
-    @media (max-width: 768px) {
-        div[data-testid="stHorizontalBlock"] {
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            align-items: center !important;
-        }
-        /* 각 칸의 여백을 좁혀서 한 줄에 딱 맞게 압축 */
-        div[data-testid="column"] {
-            min-width: 0 !important;
-            padding: 0 4px !important;
-        }
-        /* 글씨 크기 약간 축소하여 폰 화면에 최적화 */
-        .stMarkdown p {
-            font-size: 14px !important;
-            margin-bottom: 0px !important;
-        }
-        /* 숫자 입력창 내부 여백 축소 */
-        input[type="number"] {
-            font-size: 14px !important;
-            padding: 4px !important;
-        }
-    }
-</style>
-""", unsafe_allow_html=True)
 
 current_user = st.text_input("👤 사용자 닉네임 입력 (개인 맞춤 증량을 위해 필수)", placeholder="예: 운동매니아1")
 
@@ -614,7 +640,8 @@ with tab_workout:
                 for w_idx, workout in enumerate(st.session_state.active_workout):
                     with st.expander(f"🔥 {workout['name']}", expanded=True):
                         
-                        ctrl1, ctrl2, ctrl3 = st.columns(3)
+                        # ⭐ 1세트 추가/삭제 버튼 간격 초밀착 배율 적용
+                        ctrl1, ctrl2, ctrl3 = st.columns([1, 1, 1.2])
                         if ctrl1.button("➕ 1세트 추가", key=f"add_{w_idx}"):
                             workout['target_sets'] += 1
                             st.rerun()
@@ -708,22 +735,23 @@ with tab_workout:
                                 st.session_state[f"mr_{w_idx}"] = default_r
                             mc2.number_input("일괄 목표 횟수", step=1, key=f"mr_{w_idx}")
 
-                        cols = st.columns([1, 2, 2, 1])
-                        cols[0].write("세트")
-                        cols[1].write("무게")
-                        cols[2].write("횟수")
-                        cols[3].write("완료")
+                        # ⭐ 모바일 최적화 황금 배율 (1.2 : 3 : 3 : 1.5)
+                        cols = st.columns([1.2, 3, 3, 1.5])
+                        cols[0].markdown("<div style='text-align:center;'><b>세트</b></div>", unsafe_allow_html=True)
+                        cols[1].markdown("<div style='text-align:center;'><b>무게</b></div>", unsafe_allow_html=True)
+                        cols[2].markdown("<div style='text-align:center;'><b>횟수</b></div>", unsafe_allow_html=True)
+                        cols[3].markdown("<div style='text-align:center;'><b>완료</b></div>", unsafe_allow_html=True)
 
                         for i in range(1, sets + 1):
                             if f"w_{w_idx}_{i}" not in st.session_state:
                                 st.session_state[f"w_{w_idx}_{i}"] = st.session_state.get(f"mw_{w_idx}", float(default_w))
                                 
-                            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-                            c1.write(f"**{i}**")
+                            c1, c2, c3, c4 = st.columns([1.2, 3, 3, 1.5])
+                            c1.markdown(f"<div style='text-align:center; padding-top:8px;'><b>{i}</b></div>", unsafe_allow_html=True)
                             
                             if input_mode == "전체 세트 일괄 설정":
-                                c2.markdown(f"<div style='padding-top:8px;'>{st.session_state[f'mw_{w_idx}']} kg</div>", unsafe_allow_html=True)
-                                c3.markdown(f"<div style='padding-top:8px;'>{st.session_state.get(f'mr_{w_idx}', default_r)} 회</div>", unsafe_allow_html=True)
+                                c2.markdown(f"<div style='text-align:center; padding-top:8px;'>{st.session_state[f'mw_{w_idx}']} kg</div>", unsafe_allow_html=True)
+                                c3.markdown(f"<div style='text-align:center; padding-top:8px;'>{st.session_state.get(f'mr_{w_idx}', default_r)} 회</div>", unsafe_allow_html=True)
                                 weight_val = st.session_state[f'mw_{w_idx}']
                                 reps_val = st.session_state.get(f'mr_{w_idx}', default_r)
                             else:
