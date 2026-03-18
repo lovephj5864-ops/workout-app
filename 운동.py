@@ -142,6 +142,38 @@ if 'routines' not in st.session_state or st.session_state.routines is None:
 # 화면 UI 시작
 # ----------------------------------------------------
 st.title("🏋️ 플릭 스타일 운동 트래커")
+
+# ==========================================
+# ⭐ 모바일 화면 최적화 CSS 강제 주입 (새로 추가됨!)
+# ==========================================
+st.markdown("""
+<style>
+    /* 폰 화면(768px 이하)에서 컬럼이 세로로 깨지는 현상 방지 */
+    @media (max-width: 768px) {
+        div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+        }
+        /* 각 칸의 여백을 좁혀서 한 줄에 딱 맞게 압축 */
+        div[data-testid="column"] {
+            min-width: 0 !important;
+            padding: 0 4px !important;
+        }
+        /* 글씨 크기 약간 축소하여 폰 화면에 최적화 */
+        .stMarkdown p {
+            font-size: 14px !important;
+            margin-bottom: 0px !important;
+        }
+        /* 숫자 입력창 내부 여백 축소 */
+        input[type="number"] {
+            font-size: 14px !important;
+            padding: 4px !important;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
+
 current_user = st.text_input("👤 사용자 닉네임 입력 (개인 맞춤 증량을 위해 필수)", placeholder="예: 운동매니아1")
 
 tab_workout, tab_manage, tab_mad, tab_analysis = st.tabs(["💪 오늘의 운동", "⚙️ 종목 및 루틴 관리", "🔥 매드프로페서 5x5", "📊 볼륨 분석"])
@@ -503,7 +535,6 @@ with tab_manage:
 # ⭐ [탭 1 전용] 실시간 동기화 콜백 함수들
 # ==========================================
 def apply_increment(idx, base_w, num_sets):
-    # 입력한 증량치를 가져와서 일괄 무게 및 세부 세트 무게를 즉시 업데이트
     inc = st.session_state[f"inc_{idx}"]
     target = float(base_w) + float(inc)
     st.session_state[f"mw_{idx}"] = target
@@ -511,7 +542,6 @@ def apply_increment(idx, base_w, num_sets):
         st.session_state[f"w_{idx}_{i}"] = target
 
 def sync_bulk_weight(idx, num_sets):
-    # 일괄 목표 무게를 조작하면, 하단의 개별 세트 무게들도 다 함께 변경
     bw = st.session_state[f"mw_{idx}"]
     for i in range(1, num_sets + 1):
         st.session_state[f"w_{idx}_{i}"] = bw
@@ -546,7 +576,6 @@ with tab_workout:
 
             timer_container = st.empty()
             
-            # 루틴을 변경하면 예전 루틴에 남아있던 무게 기록(세션)을 완전히 청소합니다.
             if 'active_routine_name' not in st.session_state or st.session_state.active_routine_name != selected_routine_name:
                 st.session_state.active_routine_name = selected_routine_name
                 st.session_state.active_workout = copy.deepcopy(st.session_state.routines[selected_routine_name])
@@ -637,7 +666,6 @@ with tab_workout:
                                     else:
                                         past_msg += f"({success_count}/{total_count} 세트 완료)"
                             
-                            # ⭐ 증량 UX 대폭 개선 부분
                             if can_increase:
                                 st.success(past_msg)
                                 if f"inc_{w_idx}" not in st.session_state:
@@ -687,7 +715,6 @@ with tab_workout:
                         cols[3].write("완료")
 
                         for i in range(1, sets + 1):
-                            # 세트가 도중에 추가될 경우 기본값 방어
                             if f"w_{w_idx}_{i}" not in st.session_state:
                                 st.session_state[f"w_{w_idx}_{i}"] = st.session_state.get(f"mw_{w_idx}", float(default_w))
                                 
