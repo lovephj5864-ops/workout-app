@@ -173,12 +173,12 @@ tab_workout, tab_manage, tab_mad, tab_analysis = st.tabs(["💪 오늘의 운동
 past_logs_df = get_past_logs()
 
 # ==========================================
-# [탭 4] 📊 볼륨 분석 대시보드 (과거 기록 수정 기능 추가)
+# [탭 4] 📊 볼륨 분석 대시보드
 # ==========================================
 with tab_analysis:
     st.header("📊 내 볼륨 분석 및 출석부")
     if not current_user:
-        st.warning("상단에 사용자 닉네임을 입력하셔야 데이터를 분석할 수 있습니다醇.")
+        st.warning("상단에 사용자 닉네임을 입력하셔야 데이터를 분석할 수 있습니다.")
     elif past_logs_df.empty or '사용자' not in past_logs_df.columns:
         st.info("아직 저장된 구글 시트 기록이 없습니다.")
     else:
@@ -249,7 +249,7 @@ with tab_analysis:
             st.write("---")
             
             st.subheader("🔍 일별 상세 기록 조회 및 수정")
-            st.caption("아래 표에서 보고 싶은 날짜의 **[상세보기]**를 체크하여 기록을 수정할 수 있습니다.")
+            st.caption("보고 싶은 날짜의 **[상세보기]**를 체크하여 기록을 수정할 수 있습니다.")
 
             if not month_df.empty:
                 daily_vol = month_df.groupby('날짜')['볼륨'].sum().reset_index()
@@ -273,93 +273,58 @@ with tab_analysis:
                     for s_date in selected_dates:
                         st.write("")
                         st.markdown(f"#### 🛠️ {s_date} 운동 기록 수정")
+                        st.caption("💡 팁: 표 맨 왼쪽의 숫자를 누르면 행이 선택되며 휴지통(삭제) 아이콘이 나타납니다. 맨 아래 회색 ➕칸을 누르면 새 운동을 추가할 수 있습니다.")
                         
-                        # 🔹 드롭다운 목록 구성
+                        # ⭐ [개선 1] 루틴 이름 누락 및 공백 방지
+                        day_df = user_df[user_df['날짜'] == s_date].copy()
+                        if '루틴이름' not in day_df.columns:
+                            day_df['루틴이름'] = '수동수정'
+                        day_df['루틴이름'] = day_df['루틴이름'].replace(["", None], "수동수정").fillna("수동수정")
+                        
+                        edit_cols = ['루틴이름', '종목', '세트', '무게', '횟수']
+                        edit_df = day_df[edit_cols].reset_index(drop=True)
+                        
+                        # ⭐ [개선 2] 루틴에 포함된 종목만 필터링하여 드롭다운 구성
                         routine_options = ["수동수정", "기본"] + list(st.session_state.routines.keys())
-                        ex_options = list(set([ex for ex_list in st.session_state.exercises.values() for ex in ex_list]))
                         
-                        # 🔹 상태 관리를 위한 고유 키 생성
+                        routine_exercises = set()
+                        for r_data in st.session_state.routines.values():
+                            for workout in r_data:
+                                routine_exercises.add(workout['name'])
+                        
+                        # 만약 루틴에 등록된 종목이 없으면 전체 종목 출력
+                        if routine_exercises:
+                            ex_options = sorted(list(routine_exercises))
+                        else:
+                            ex_options = list(set([ex for ex_list in st.session_state.exercises.values() for ex in ex_list]))
+
                         state_key = f"day_edit_state_{s_date}"
-                        counter_key = f"day_edit_counter_{s_date}"
                         
-                        if counter_key not in st.session_state:
-                            st.session_state[counter_key] = 0
-
-                        if state_key not in st.session_state:
-                            day_df = user_df[user_df['날짜'] == s_date].copy()
-                            edit_cols = ['루틴이름', '종목', '세트', '무게', '횟수']
-                            for c in edit_cols:
-                                if c not in day_df.columns:
-                                    if c == '루틴이름': day_df[c] = '수동수정'
-                                    elif c == '세트' or c == '횟수': day_df[c] = 1
-                                    elif c == '무게': day_df[c] = 0.0
-                            edit_df = day_df[edit_cols].reset_index(drop=True)
-                            # 체크박스(선택) 열 맨 앞에 추가
-                            edit_df.insert(0, '선택', False)
-                            st.session_state[state_key] = edit_df
-
-                        # 🔹 동적 에디터 렌더링
+                        # ⭐ [개선 3] 커스텀 체크박스 제거 & num_rows="dynamic"으로 기본 기능 활용
                         edited_day_df = st.data_editor(
-                            st.session_state[state_key],
+                            edit_df,
                             num_rows="dynamic",
                             use_container_width=True,
                             column_config={
-                                "선택": st.column_config.CheckboxColumn("선택", default=False, width="small"),
-                                "루틴이름": st.column_config.SelectboxColumn("루틴 이름", options=routine_options, width="small"),
-                                "종목": st.column_config.SelectboxColumn("종목명", options=ex_options, required=True, width="medium"),
+                                "루틴이름": st.column_config.SelectboxColumn("루틴 이름", options=routine_options, width="medium"),
+                                "종목": st.column_config.SelectboxColumn("종목명(루틴기준)", options=ex_options, required=True, width="medium"),
                                 "세트": st.column_config.NumberColumn("세트", min_value=1, step=1, required=True, width="small"),
                                 "무게": st.column_config.NumberColumn("무게(kg)", min_value=0.0, step=0.5, required=True, width="small"),
                                 "횟수": st.column_config.NumberColumn("횟수", min_value=0, step=1, required=True, width="small"),
                             },
-                            key=f"editor_{s_date}_{st.session_state[counter_key]}"
+                            key=f"editor_{s_date}"
                         )
-                        
-                        # 🔹 편집 내용 저장
-                        st.session_state[state_key] = edited_day_df
-                        
-                        # 🔹 행 추가 / 삭제 기능 (체크박스 기반)
-                        btn_col1, btn_col2 = st.columns(2)
-                        
-                        if btn_col1.button("➕ 선택된 행 위에 추가", key=f"add_row_{s_date}"):
-                            df = st.session_state[state_key].copy()
-                            selected_indices = df[df['선택'] == True].index.tolist()
-                            if selected_indices:
-                                idx = selected_indices[0] # 첫 번째 선택된 행 기준
-                                new_row = pd.DataFrame([{
-                                    "선택": False,
-                                    "루틴이름": "수동수정",
-                                    "종목": ex_options[0] if ex_options else "",
-                                    "세트": 1,
-                                    "무게": 0.0,
-                                    "횟수": 0
-                                }])
-                                df = pd.concat([df.iloc[:idx], new_row, df.iloc[idx:]]).reset_index(drop=True)
-                                st.session_state[state_key] = df
-                                st.session_state[counter_key] += 1
-                                st.rerun()
-                            else:
-                                st.warning("추가할 위치의 기준이 되는 행의 '선택' 체크박스를 눌러주세요.")
-                                
-                        if btn_col2.button("🗑️ 선택된 행 삭제", key=f"del_row_{s_date}"):
-                            df = st.session_state[state_key].copy()
-                            if df['선택'].any():
-                                df = df[df['선택'] == False].reset_index(drop=True)
-                                st.session_state[state_key] = df
-                                st.session_state[counter_key] += 1
-                                st.rerun()
-                            else:
-                                st.warning("삭제할 행의 '선택' 체크박스를 눌러주세요.")
 
                         st.write("")
                         if st.button(f"💾 {s_date} 기록 수정사항 DB에 저장하기", type="primary", key=f"save_day_{s_date}", use_container_width=True):
                             with st.spinner("구글 시트에 업데이트 중..."):
                                 new_records = []
-                                for _, row in st.session_state[state_key].iterrows():
+                                for _, row in edited_day_df.iterrows():
                                     if pd.notna(row['종목']) and str(row['종목']).strip() != "":
                                         new_records.append([
                                             s_date,
                                             current_user,
-                                            str(row.get('루틴이름', '수동수정')),
+                                            str(row.get('루틴이름', '수동수정')).strip() or '수동수정',
                                             str(row['종목']),
                                             int(row['세트']),
                                             float(row['무게']),
@@ -369,7 +334,6 @@ with tab_analysis:
                                 
                                 if update_daily_logs(s_date, current_user, new_records):
                                     st.success(f"[{s_date}] 기록 수정이 완료되었습니다! 👏")
-                                    del st.session_state[state_key] # 저장 후 캐시 비우기
                                     get_past_logs.clear()
                                     time.sleep(1)
                                     st.rerun()
