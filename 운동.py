@@ -12,10 +12,23 @@ import calendar
 import streamlit.components.v1 as components
 
 # ==========================================
-# ⭐ 기본 설정 및 사이드바
+# ⭐ 모바일 화면 좌우 여백 낭비 차단 CSS
 # ==========================================
 st.set_page_config(page_title="운동 트래커", layout="centered")
+st.markdown("""
+<style>
+    /* 스마트폰에서 화면 좌우 테두리 여백을 최소화하여 표가 들어갈 자리 확보 */
+    .block-container {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        padding-top: 1rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
+# ==========================================
+# ⭐ 사이드바 수동 동기화 버튼
+# ==========================================
 with st.sidebar:
     st.subheader("🔄 서버 데이터 동기화")
     st.caption("구글 시트와 연결이 끊기거나 데이터가 안 보일 때 눌러주세요.")
@@ -350,7 +363,7 @@ with tab_manage:
             st.rerun()
 
 # ==========================================
-# [탭 1] 오늘의 운동 기록 화면 (🚨 데이터 에디터 전면 적용!)
+# [탭 1] 오늘의 운동 기록 화면
 # ==========================================
 with tab_workout:
     if not current_user:
@@ -376,8 +389,7 @@ with tab_workout:
             if 'active_routine_name' not in st.session_state or st.session_state.active_routine_name != selected_routine_name:
                 st.session_state.active_routine_name = selected_routine_name
                 st.session_state.active_workout = copy.deepcopy(st.session_state.routines[selected_routine_name])
-                # 기존 세션 청소
-                keys_to_del = [k for k in st.session_state.keys() if k.startswith("de_") or k.startswith("prev_de_")]
+                keys_to_del = [k for k in st.session_state.keys() if k.startswith("de_") or k.startswith("prev_de_") or k.startswith("inc_") or k.startswith("prev_inc_")]
                 for k in keys_to_del: del st.session_state[k]
                 st.session_state.last_completed_time = 0 
 
@@ -405,7 +417,6 @@ with tab_workout:
                 for w_idx, workout in enumerate(st.session_state.active_workout):
                     with st.expander(f"🔥 {workout['name']}", expanded=True):
                         
-                        # 컴팩트해진 상단 조작 버튼
                         ctrl1, ctrl2, ctrl3 = st.columns(3)
                         if ctrl1.button("➕ 세트추가", key=f"add_{w_idx}", use_container_width=True):
                             workout['target_sets'] += 1
@@ -426,7 +437,6 @@ with tab_workout:
                         is_madprofessor = "[매드프로페서]" in selected_routine_name
                         master_weight = float(default_w)
 
-                        # 증량 로직
                         if is_madprofessor:
                             st.info(f"목표 중량: {default_w}kg")
                         else:
@@ -440,10 +450,9 @@ with tab_workout:
                                     total_count = len(last_session)
                                     last_weight = float(last_session['무게'].iloc[-1])
                                     
-                                    msg = f"마지막 기록({last_date}): {last_weight}kg x {total_count}세트"
+                                    msg = f"기록({last_date}): {last_weight}kg x {total_count}세트"
                                     if success_count == total_count and total_count > 0:
-                                        st.success(f"{msg} (전 세트 성공! 🌟)")
-                                        # 실시간 증량 반영
+                                        st.success(f"{msg} (올클리어🌟)")
                                         if f"inc_{w_idx}" not in st.session_state:
                                             st.session_state[f"inc_{w_idx}"] = 2.5
                                         inc_val = st.number_input("📈 오늘 증량할 무게(kg)", step=1.25, value=st.session_state[f"inc_{w_idx}"], key=f"inc_{w_idx}")
@@ -451,74 +460,70 @@ with tab_workout:
                                         if f"prev_inc_{w_idx}" not in st.session_state:
                                             st.session_state[f"prev_inc_{w_idx}"] = inc_val
                                         if st.session_state[f"prev_inc_{w_idx}"] != inc_val:
-                                            st.session_state[f"de_{w_idx}"]["무게(kg)"] = float(last_weight + inc_val)
+                                            st.session_state[f"de_{w_idx}"]["무게"] = float(last_weight + inc_val)
                                             st.session_state[f"prev_inc_{w_idx}"] = inc_val
                                             st.rerun()
                                         master_weight = last_weight + inc_val
                                     else:
-                                        st.info(f"{msg} ➔ 오늘은 동일 무게로 재도전!")
+                                        st.info(f"{msg} ➔ 오늘은 재도전!")
                                         master_weight = last_weight
 
                         st.write("")
                         
-                        # ⭐ 스트림릿 최신 기술: 데이터 에디터(Interactive Table) 상태 관리
+                        # ⭐ 데이터 에디터 키 (무게 컬럼 이름을 짧게 수정)
                         editor_key = f"de_{w_idx}"
                         
                         if editor_key not in st.session_state:
                             initial_data = []
                             for i in range(1, sets + 1):
-                                initial_data.append({"세트": i, "무게(kg)": float(master_weight), "횟수": int(default_r), "완료": False})
+                                initial_data.append({"세트": i, "무게": float(master_weight), "횟수": int(default_r), "완료": False})
                             st.session_state[editor_key] = pd.DataFrame(initial_data)
                             st.session_state[f"prev_{editor_key}"] = [False] * sets
 
                         df = st.session_state[editor_key]
                         current_rows = len(df)
                         
-                        # 세트 추가/삭제 대응
                         if current_rows < sets:
-                            new_row = pd.DataFrame([{"세트": current_rows + 1, "무게(kg)": float(master_weight), "횟수": int(default_r), "완료": False}])
+                            new_row = pd.DataFrame([{"세트": current_rows + 1, "무게": float(master_weight), "횟수": int(default_r), "완료": False}])
                             st.session_state[editor_key] = pd.concat([df, new_row], ignore_index=True)
                             st.session_state[f"prev_{editor_key}"].append(False)
                         elif current_rows > sets:
                             st.session_state[editor_key] = df.iloc[:sets]
                             st.session_state[f"prev_{editor_key}"] = st.session_state[f"prev_{editor_key}"][:sets]
 
-                        # 전체 완료 대응
                         if st.session_state.get(f"mark_all_{w_idx}", False):
                             st.session_state[editor_key]["완료"] = True
                             st.session_state[f"prev_{editor_key}"] = [True] * sets
                             st.session_state[f"mark_all_{w_idx}"] = False
 
-                        # 🚨 대망의 데이터 에디터 출력부! (모바일 세로 깨짐 완전 방지)
+                        # 🚨 모바일 최적화: width="small" 강제 부여 및 헤더 단축
                         edited_df = st.data_editor(
                             st.session_state[editor_key],
                             hide_index=True,
                             use_container_width=True,
                             column_config={
                                 "세트": st.column_config.NumberColumn("세트", disabled=True, width="small"),
-                                "무게(kg)": st.column_config.NumberColumn("무게(kg)", min_value=0.0, step=2.5, width="medium"),
-                                "횟수": st.column_config.NumberColumn("횟수", min_value=0, step=1, width="medium"),
+                                "무게": st.column_config.NumberColumn("무게", min_value=0.0, step=2.5, width="small"),
+                                "횟수": st.column_config.NumberColumn("횟수", min_value=0, step=1, width="small"),
                                 "완료": st.column_config.CheckboxColumn("완료", default=False, width="small")
                             },
                             key=f"widget_{editor_key}"
                         )
 
-                        # 체크박스 변경 감지 및 타이머 트리거
                         new_done = edited_df["완료"].tolist()
                         old_done = st.session_state[f"prev_{editor_key}"]
                         for old, new in zip(old_done, new_done):
-                            if not old and new: # 체크박스를 방금 켰을 때!
+                            if not old and new: 
                                 st.session_state.last_completed_time = time.time()
                                 break
                                 
                         st.session_state[editor_key] = edited_df
                         st.session_state[f"prev_{editor_key}"] = new_done
                         
-                        # 볼륨 및 로그 데이터 축적
                         for _, row in edited_df.iterrows():
                             if row["완료"]:
-                                current_unsaved_vol += (row["무게(kg)"] * row["횟수"])
-                            today_logs.append([today_str, current_user, selected_routine_name, ex_name, int(row["세트"]), float(row["무게(kg)"]), int(row["횟수"]), "O" if row["완료"] else "X"])
+                                current_unsaved_vol += (row["무게"] * row["횟수"])
+                            today_logs.append([today_str, current_user, selected_routine_name, ex_name, int(row["세트"]), float(row["무게"]), int(row["횟수"]), "O" if row["완료"] else "X"])
 
                 with vol_dashboard:
                     st.markdown("### 📈 실시간 볼륨 달성도")
