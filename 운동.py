@@ -12,53 +12,16 @@ import calendar
 import streamlit.components.v1 as components
 
 # ==========================================
-# ⭐ 모바일 최적화 CSS (앱 전체의 세로 무너짐 완벽 차단)
+# ⭐ 모바일 최적화 CSS (화면 깨뜨리던 악성 코드 전부 삭제!)
 # ==========================================
 st.set_page_config(page_title="운동 트래커", layout="centered")
 st.markdown("""
 <style>
-    /* 1. 화면 좌우 낭비되는 여백 최소화 */
+    /* 스마트폰 화면 좌우 낭비되는 여백만 깔끔하게 축소하는 가장 안전한 코드 */
     .block-container {
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
         padding-top: 1rem !important;
-    }
-    
-    /* 2. ⭐ 핵심: 모바일에서 앱 전체의 기둥(Column)이 세로로 무너지는 현상 원천 차단 */
-    div[data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important; /* 절대 밑으로 떨어지지 마라! */
-        gap: 2px !important; /* 기둥 사이 여백을 2px로 꽉 조임 */
-    }
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        min-width: 0 !important; /* 모바일에서 100% 팽창하는 본능 파괴 */
-        padding: 0 1px !important;
-    }
-
-    /* 3. 📅 정확히 '7개'짜리 기둥(달력)과 그 안의 버튼만 표(Table) 모양으로 강제 압축 */
-    div[data-testid="column"]:first-child:nth-last-child(7),
-    div[data-testid="column"]:first-child:nth-last-child(7) ~ div[data-testid="column"] {
-        flex: 1 1 14.2% !important; /* 정확히 7등분 */
-        width: 14.2% !important;
-    }
-    
-    /* 달력 내부 터치 버튼 디자인 (표의 칸처럼 보이게 다이어트) */
-    div[data-testid="column"]:first-child:nth-last-child(7) button,
-    div[data-testid="column"]:first-child:nth-last-child(7) ~ div[data-testid="column"] button {
-        width: 100% !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        min-height: 38px !important;
-        height: 38px !important;
-        font-size: 11px !important;
-    }
-    
-    /* 달력 요일 텍스트 */
-    div[data-testid="column"]:first-child:nth-last-child(7) p,
-    div[data-testid="column"]:first-child:nth-last-child(7) ~ div[data-testid="column"] p {
-        text-align: center !important;
-        font-size: 12px !important;
-        margin-bottom: 2px !important;
-        word-break: keep-all !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -185,13 +148,13 @@ if 'routines' not in st.session_state or st.session_state.routines is None:
 # 화면 UI 시작
 # ----------------------------------------------------
 st.title("🏋️ 플릭 스타일 운동 트래커")
-current_user = st.text_input("👤 사용자 닉네임 입력", placeholder="예: 운동매니아1")
+current_user = st.text_input("👤 사용자 닉네임 입력", placeholder="예: 급수_지역_번호")
 
 tab_workout, tab_manage, tab_mad, tab_analysis = st.tabs(["💪 오늘의 운동", "⚙️ 종목 및 루틴 관리", "🔥 매드프로페서", "📊 볼륨 분석"])
 past_logs_df = get_past_logs()
 
 # ==========================================
-# [탭 4] 📊 볼륨 분석 대시보드 (터치 가능한 표 달력 복구)
+# [탭 4] 📊 볼륨 분석 대시보드 (⭐ 제안해주신 표 체크박스 방식 적용!)
 # ==========================================
 with tab_analysis:
     st.header("📊 내 볼륨 분석 및 출석부")
@@ -239,13 +202,9 @@ with tab_analysis:
 
             st.divider()
             
-            # ⭐ 2. 내 운동 출석부 (터치 가능한 버튼 달력)
+            # 📅 월별 달력은 보기 전용(Visual) 표로 출력 (절대 안 깨짐)
             st.subheader("2. 📅 내 운동 출석부")
-            st.caption("아래의 날짜 버튼을 터치하시면 바로 상세 기록이 나옵니다.")
-            
             now = datetime.now()
-            if 'sel_date' not in st.session_state:
-                st.session_state.sel_date = now.strftime("%Y-%m-%d")
 
             cal_c1, cal_c2 = st.columns(2)
             sel_y = cal_c1.selectbox("연도", range(now.year - 1, now.year + 2), index=1)
@@ -256,33 +215,58 @@ with tab_analysis:
             cal_matrix = calendar.monthcalendar(sel_y, sel_m)
             weekdays = ["월", "화", "수", "목", "금", "토", "일"]
 
-            # 🚨 요일 헤더 (세로 붕괴를 막은 전역 CSS 적용됨)
-            cols = st.columns(7)
-            for i, day_name in enumerate(weekdays):
-                color = "#EF5350" if i == 6 else ("#42A5F5" if i == 5 else "#FFFFFF") 
-                cols[i].markdown(f"<p style='color: {color}; font-weight: bold;'>{day_name}</p>", unsafe_allow_html=True)
-
-            # 🚨 날짜 터치 버튼
+            cal_table = []
             for week in cal_matrix:
-                cols = st.columns(7)
+                row_data = {}
                 for i, day in enumerate(week):
-                    if day != 0:
+                    if day == 0:
+                        row_data[weekdays[i]] = ""
+                    else:
                         marker = " 🔥" if day in worked_out_days else ""
-                        if cols[i].button(f"{day}{marker}", key=f"cal_{sel_y}_{sel_m}_{day}", use_container_width=True):
-                            st.session_state.sel_date = f"{sel_y}-{sel_m:02d}-{day:02d}"
+                        row_data[weekdays[i]] = f"{day}{marker}"
+                cal_table.append(row_data)
+
+            st.dataframe(pd.DataFrame(cal_table), hide_index=True, use_container_width=True)
 
             st.write("---")
-            st.subheader(f"🔍 {st.session_state.sel_date} 운동 상세 내역")
             
-            day_df = user_df[user_df['날짜'] == st.session_state.sel_date]
+            # ⭐ 제안해주신 핵심: 체크박스로 동작하는 데이터 표(DataEditor) 도입!
+            st.subheader("🔍 일별 상세 기록 조회")
+            st.caption("아래 표에서 보고 싶은 날짜의 **[상세보기]** 체크박스를 눌러주세요.")
 
-            if day_df.empty:
-                st.info(f"{st.session_state.sel_date} - 이날은 완료된 운동 기록이 없습니다.")
+            if not month_df.empty:
+                daily_vol = month_df.groupby('날짜')['볼륨'].sum().reset_index()
+                daily_vol['상세보기'] = False # 기본값은 체크 해제 상태
+                
+                # 표 형태로 출력 (모바일 반응형 완벽 호환)
+                edited_daily = st.data_editor(
+                    daily_vol,
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "날짜": st.column_config.TextColumn("운동한 날짜", disabled=True),
+                        "볼륨": st.column_config.NumberColumn("총 볼륨", format="%d kg", disabled=True),
+                        "상세보기": st.column_config.CheckboxColumn("상세보기 👈 (클릭)", default=False)
+                    },
+                    key=f"detail_editor_{sel_y}_{sel_m}"
+                )
+                
+                # 체크박스가 True인 날짜들만 모아서 하단에 출력
+                selected_dates = edited_daily[edited_daily['상세보기'] == True]['날짜'].tolist()
+                
+                if selected_dates:
+                    for s_date in selected_dates:
+                        st.write("")
+                        st.markdown(f"#### 🏅 {s_date} 운동 내역")
+                        day_df = user_df[user_df['날짜'] == s_date]
+                        st.success(f"**총 볼륨: {day_df['볼륨'].sum():,.0f} kg**")
+                        summary_df = day_df.groupby(['종목', '무게', '횟수']).size().reset_index(name='세트수')
+                        for _, row in summary_df.iterrows():
+                            st.markdown(f"- **{row['종목']}** : {row['무게']}kg × {row['횟수']}회 × {row['세트수']}세트")
+                else:
+                    st.info("👆 위 표에서 확인하고 싶은 날짜를 체크해 보세요.")
             else:
-                st.success(f"**총 볼륨: {day_df['볼륨'].sum():,.0f} kg**")
-                summary_df = day_df.groupby(['종목', '무게', '횟수']).size().reset_index(name='세트수')
-                for _, row in summary_df.iterrows():
-                    st.markdown(f"- **{row['종목']}** : {row['무게']}kg × {row['횟수']}회 × {row['세트수']}세트")
+                st.info("해당 월에는 완료된 운동 기록이 없습니다.")
 
 # ==========================================
 # [탭 3] 매드프로페서 5x5
