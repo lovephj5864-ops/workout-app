@@ -12,56 +12,52 @@ import calendar
 import streamlit.components.v1 as components
 
 # ==========================================
-# ⭐ 모바일 최적화 CSS (모든 스마트폰 100% 호환 - 인라인 스타일 저격)
+# ⭐ 모바일 최적화 CSS (달력을 완벽한 '표' 형식으로 강제 변환)
 # ==========================================
 st.set_page_config(page_title="운동 트래커", layout="centered")
 st.markdown("""
 <style>
-    /* 1. 스마트폰 화면 좌우 낭비되는 여백 깔끔하게 축소 */
+    /* 1. 화면 좌우 여백 축소 */
     .block-container {
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
         padding-top: 1rem !important;
     }
     
-    /* 2. 모바일 브라우저 강제 세로 나열 완벽 무효화 */
-    @media screen and (max-width: 768px) {
-        
-        /* 스트림릿의 가로 블록이 세로(Column)로 꺾이는 현상을 막고 가로(row) 속성 강제 유지 */
-        div[data-testid="stHorizontalBlock"] {
-            flex-direction: row !important;
-            flex-wrap: wrap !important;
-            gap: 0 !important;
-        }
+    /* 2. 📅 7열 달력을 '표(Table)'처럼 한 줄로 강제 고정 */
+    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important; /* 밑으로 떨어짐 절대 방지 */
+        gap: 2px !important;
+        width: 100% !important;
+    }
 
-        /* ⭐ 기적의 꼼수: 스트림릿이 st.columns(7)을 만들 때 HTML 내부에 몰래 적어두는 
-           '14.28%' 라는 숫자(inline-style)를 추적해서 저격합니다! 
-           (구형 사파리, 카카오톡 인앱 브라우저 등에서 100% 무조건 작동합니다) */
-        div[data-testid="column"][style*="14.2"] {
-            flex: 0 0 14.28% !important;
-            width: 14.28% !important;
-            min-width: 14.2% !important;
-            max-width: 14.3% !important;
-            padding: 0 2px !important; /* 버튼 사이 살짝 간격 */
-        }
+    /* ⭐ 핵심 타격 1: 기둥(Column)이 무조건 줄어들 수 있도록 스트림릿 방어막 해제 */
+    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) > div[data-testid="column"] {
+        width: calc(100% / 7) !important;
+        flex: 1 1 0% !important;
+        min-width: 0 !important; /* ← 이게 없어서 여태 안 줄어들었던 겁니다! */
+        padding: 0 !important;
+    }
 
-        /* 거대해지려는 달력 내부 버튼들을 억누르고 터치하기 좋은 크기로 깎아냄 */
-        div[data-testid="column"][style*="14.2"] button {
-            width: 100% !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            min-height: 40px !important;
-            height: 40px !important;
-            font-size: 11px !important;
-            border-radius: 4px !important;
-        }
+    /* ⭐ 핵심 타격 2: 달력 버튼들도 덩치 고집을 버리고 기둥 크기에 맞춰 다이어트 */
+    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) button {
+        width: 100% !important;
+        min-width: 0 !important; /* ← 버튼 최소 너비 파괴! */
+        padding: 0 !important;
+        margin: 0 !important;
+        height: 38px !important;
+        min-height: 38px !important;
+    }
 
-        /* 요일 텍스트(월, 화, 수) 중앙 정렬 및 불필요한 여백 제거 */
-        div[data-testid="column"][style*="14.2"] div[data-testid="stMarkdownContainer"] p {
-            font-size: 12px !important;
-            text-align: center !important;
-            margin-bottom: 2px !important;
-        }
+    /* 달력 내부 텍스트(요일, 숫자, 불꽃) 크기 및 줄바꿈 최적화 */
+    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) button p,
+    div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(7)) div[data-testid="stMarkdownContainer"] p {
+        font-size: 11px !important;
+        margin: 0 !important;
+        text-align: center !important;
+        word-break: keep-all !important; /* 글자 쪼개짐 방지 */
     }
 </style>
 """, unsafe_allow_html=True)
