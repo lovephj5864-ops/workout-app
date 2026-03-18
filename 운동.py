@@ -12,12 +12,11 @@ import calendar
 import streamlit.components.v1 as components
 
 # ==========================================
-# ⭐ 모바일 최적화 CSS (화면 깨뜨리던 악성 코드 전부 삭제!)
+# ⭐ 모바일 최적화 CSS
 # ==========================================
 st.set_page_config(page_title="운동 트래커", layout="centered")
 st.markdown("""
 <style>
-    /* 스마트폰 화면 좌우 낭비되는 여백만 깔끔하게 축소하는 가장 안전한 코드 */
     .block-container {
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
@@ -119,6 +118,29 @@ def save_routine_to_sheet(routine_name, routine_data):
     except Exception as e:
         return False
 
+# ⭐ 특정 일자의 과거 기록을 DB에서 수정(덮어쓰기)하는 기능 추가
+def update_daily_logs(date_str, user, new_records_list):
+    try:
+        sheet = doc.worksheet("Logs")
+        all_records = sheet.get_all_values()
+        
+        # 1. 해당 일자 & 해당 유저의 기존 데이터를 아래에서부터 삭제 (인덱스 꼬임 방지)
+        rows_to_delete = []
+        for i, row in enumerate(all_records):
+            if i == 0: continue # 헤더 제외
+            if len(row) >= 2 and row[0] == date_str and row[1] == user:
+                rows_to_delete.append(i + 1)
+                
+        for row_idx in reversed(rows_to_delete):
+            sheet.delete_rows(row_idx)
+            
+        # 2. 수정/추가된 새로운 데이터들을 한 번에 추가
+        if new_records_list:
+            sheet.append_rows(new_records_list)
+        return True
+    except Exception as e:
+        return False
+
 def round_to_plate(weight, min_plate):
     step = min_plate * 2
     return round(weight / step) * step
@@ -154,7 +176,7 @@ tab_workout, tab_manage, tab_mad, tab_analysis = st.tabs(["💪 오늘의 운동
 past_logs_df = get_past_logs()
 
 # ==========================================
-# [탭 4] 📊 볼륨 분석 대시보드 (⭐ 제안해주신 표 체크박스 방식 적용!)
+# [탭 4] 📊 볼륨 분석 대시보드 (과거 기록 수정 기능 추가)
 # ==========================================
 with tab_analysis:
     st.header("📊 내 볼륨 분석 및 출석부")
@@ -202,7 +224,6 @@ with tab_analysis:
 
             st.divider()
             
-            # 📅 월별 달력은 보기 전용(Visual) 표로 출력 (절대 안 깨짐)
             st.subheader("2. 📅 내 운동 출석부")
             now = datetime.now()
 
@@ -230,15 +251,13 @@ with tab_analysis:
 
             st.write("---")
             
-            # ⭐ 제안해주신 핵심: 체크박스로 동작하는 데이터 표(DataEditor) 도입!
-            st.subheader("🔍 일별 상세 기록 조회")
-            st.caption("아래 표에서 보고 싶은 날짜의 **[상세보기]** 체크박스를 눌러주세요.")
+            st.subheader("🔍 일별 상세 기록 조회 및 수정")
+            st.caption("아래 표에서 보고 싶은 날짜의 **[상세보기]**를 체크하여 기록을 수정할 수 있습니다.")
 
             if not month_df.empty:
                 daily_vol = month_df.groupby('날짜')['볼륨'].sum().reset_index()
-                daily_vol['상세보기'] = False # 기본값은 체크 해제 상태
+                daily_vol['상세보기'] = False 
                 
-                # 표 형태로 출력 (모바일 반응형 완벽 호환)
                 edited_daily = st.data_editor(
                     daily_vol,
                     hide_index=True,
@@ -251,18 +270,60 @@ with tab_analysis:
                     key=f"detail_editor_{sel_y}_{sel_m}"
                 )
                 
-                # 체크박스가 True인 날짜들만 모아서 하단에 출력
                 selected_dates = edited_daily[edited_daily['상세보기'] == True]['날짜'].tolist()
                 
                 if selected_dates:
                     for s_date in selected_dates:
                         st.write("")
-                        st.markdown(f"#### 🏅 {s_date} 운동 내역")
-                        day_df = user_df[user_df['날짜'] == s_date]
-                        st.success(f"**총 볼륨: {day_df['볼륨'].sum():,.0f} kg**")
-                        summary_df = day_df.groupby(['종목', '무게', '횟수']).size().reset_index(name='세트수')
-                        for _, row in summary_df.iterrows():
-                            st.markdown(f"- **{row['종목']}** : {row['무게']}kg × {row['횟수']}회 × {row['세트수']}세트")
+                        st.markdown(f"#### 🛠️ {s_date} 운동 기록 수정")
+                        st.caption("아래 표에서 종목, 무게, 횟수 등을 자유롭게 수정/삭제/추가한 후 '저장' 버튼을 누르세요.")
+                        
+                        day_df = user_df[user_df['날짜'] == s_date].copy()
+                        
+                        # 편집할 열만 추출
+                        edit_cols = ['루틴이름', '종목', '세트', '무게', '횟수']
+                        edit_df = day_df[edit_cols].reset_index(drop=True)
+                        
+                        # ⭐ 동적 에디터 (num_rows="dynamic"으로 행 추가/삭제 가능)
+                        edited_day_df = st.data_editor(
+                            edit_df,
+                            num_rows="dynamic",
+                            use_container_width=True,
+                            column_config={
+                                "루틴이름": st.column_config.TextColumn("루틴 이름", width="small"),
+                                "종목": st.column_config.TextColumn("종목명", required=True, width="medium"),
+                                "세트": st.column_config.NumberColumn("세트", min_value=1, step=1, required=True, width="small"),
+                                "무게": st.column_config.NumberColumn("무게(kg)", min_value=0.0, step=0.5, required=True, width="small"),
+                                "횟수": st.column_config.NumberColumn("횟수", min_value=0, step=1, required=True, width="small"),
+                            },
+                            key=f"edit_day_{s_date}"
+                        )
+                        
+                        if st.button(f"💾 {s_date} 기록 수정사항 DB에 저장하기", type="primary", key=f"save_day_{s_date}"):
+                            with st.spinner("구글 시트에 업데이트 중..."):
+                                new_records = []
+                                for _, row in edited_day_df.iterrows():
+                                    # 종목명이 비어있지 않은 유효한 행만 저장
+                                    if pd.notna(row['종목']) and str(row['종목']).strip() != "":
+                                        # [날짜, 사용자, 루틴이름, 종목, 세트, 무게, 횟수, 완료여부]
+                                        new_records.append([
+                                            s_date,
+                                            current_user,
+                                            str(row.get('루틴이름', '수동수정')),
+                                            str(row['종목']),
+                                            int(row['세트']),
+                                            float(row['무게']),
+                                            int(row['횟수']),
+                                            'O'
+                                        ])
+                                
+                                if update_daily_logs(s_date, current_user, new_records):
+                                    st.success(f"[{s_date}] 기록 수정이 완료되었습니다! 👏")
+                                    get_past_logs.clear()
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("데이터 저장 중 오류가 발생했습니다.")
                 else:
                     st.info("👆 위 표에서 확인하고 싶은 날짜를 체크해 보세요.")
             else:
