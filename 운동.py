@@ -14,6 +14,9 @@ import streamlit.components.v1 as components
 # ==========================================
 # ⭐ 모바일 최적화 CSS (독소 코드 제거 & 달력만 핀셋 적용)
 # ==========================================
+# ==========================================
+# ⭐ 모바일 최적화 CSS (독소 코드 제거 & 달력만 핀셋 적용)
+# ==========================================
 st.set_page_config(page_title="운동 트래커", layout="centered")
 st.markdown("""
 <style>
@@ -24,18 +27,29 @@ st.markdown("""
         padding-top: 1rem !important;
     }
     
-    /* 2. 📅 달력 위젯(7열) 전용 가로 고정 (다른 탭이나 버튼에는 절대 영향 안 줌!) */
+    /* 2. 📅 달력 위젯(7열) 전용 가로 고정 (화면 밖으로 나가는 현상 완벽 해결) */
     div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) {
         flex-direction: row !important;
         flex-wrap: nowrap !important;
+        gap: 3px !important; /* 열 사이 기본 간격을 대폭 줄임 */
+        width: 100% !important; /* 화면 너비에 딱 맞춤 */
     }
     div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) > div[data-testid="column"] {
         min-width: 0 !important;
-        padding: 0 1px !important;
+        width: calc(100% / 7) !important; /* 정확하게 7등분 */
+        flex: 1 1 0% !important;
+        padding: 0 !important;
     }
     div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) button {
-        padding: 0.2rem 0 !important;
+        padding: 0 !important; /* 버튼 내부 여백 완전 제거 */
+        margin: 0 !important;
         font-size: 11px !important;
+        min-height: 38px !important; /* 터치하기 편한 최소 높이 보장 */
+        height: 38px !important;
+        width: 100% !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) div[data-testid="stMarkdownContainer"] p {
+        font-size: 12px !important; /* 요일 글자 크기 최적화 */
     }
 </style>
 """, unsafe_allow_html=True)
