@@ -324,14 +324,75 @@ with tab_mad:
         st.success(f"🎉 생성 완료!")
 
 # ==========================================
-# [탭 2] 종목 및 루틴 관리
+# ⭐ [복구완료!! 탭 2] 종목 및 루틴 관리
 # ==========================================
 with tab_manage:
-    st.header("1. 새 루틴 만들기")
-    new_routine_name = st.text_input("새 루틴 이름", placeholder="예: 가슴/삼두")
+    st.header("1. 종목 관리 (추가 및 삭제)")
+    manage_col1, manage_col2 = st.columns(2)
     
-    flat_list = [f"[{k}] {v}" for k, lst in st.session_state.exercises.items() for v in lst]
-    selected_exs = st.multiselect("종목 선택", flat_list)
+    with manage_col1:
+        st.subheader("➕ 종목 추가")
+        add_category = st.selectbox("부위 선택", list(st.session_state.exercises.keys()), key="add_cat")
+        new_exercise = st.text_input("추가할 운동 이름", placeholder="예: 스모 데드리프트")
+        if st.button("종목 추가하기", use_container_width=True):
+            if new_exercise and new_exercise not in st.session_state.exercises[add_category]:
+                st.session_state.exercises[add_category].append(new_exercise)
+                try:
+                    ex_sheet = doc.worksheet("Exercises")
+                    ex_sheet.append_row([add_category, new_exercise])
+                    load_exercises_from_sheet.clear()
+                    st.success(f"[{add_category}] '{new_exercise}' 추가 완료!")
+                except Exception as e:
+                    pass
+                st.rerun()
+                
+    with manage_col2:
+        st.subheader("➖ 종목 삭제")
+        del_category = st.selectbox("부위 선택", list(st.session_state.exercises.keys()), key="del_cat")
+        if st.session_state.exercises[del_category]:
+            del_exercise = st.selectbox("삭제할 운동 선택", st.session_state.exercises[del_category], key="del_ex")
+            if st.button("종목 삭제하기", type="secondary", use_container_width=True):
+                st.session_state.exercises[del_category].remove(del_exercise)
+                try:
+                    ex_sheet = doc.worksheet("Exercises")
+                    all_data = ex_sheet.get_all_values()
+                    row_to_delete = None
+                    for i, row in enumerate(all_data):
+                        if len(row) >= 2 and row[0] == del_category and row[1] == del_exercise:
+                            row_to_delete = i + 1
+                            break
+                    if row_to_delete:
+                        ex_sheet.delete_rows(row_to_delete)
+                        load_exercises_from_sheet.clear()
+                except Exception as e:
+                    pass
+                st.rerun()
+        else:
+            st.caption("해당 부위에 등록된 종목이 없습니다.")
+
+    st.write("")
+    st.subheader("📋 부위별 등록된 종목 목록")
+    cols = st.columns(3)
+    col_idx = 0
+    for category, ex_list in st.session_state.exercises.items():
+        with cols[col_idx % 3].expander(f"**{category}** ({len(ex_list)}개)"):
+            for ex in ex_list:
+                st.write(f"- {ex}")
+        col_idx += 1
+
+    st.divider()
+
+    st.header("2. 새 루틴 만들기 (공유됨)")
+    new_routine_name = st.text_input("새 루틴 이름", placeholder="예: 월요일 가슴/삼두 루틴")
+    
+    filter_categories = st.multiselect("부위 필터링", list(st.session_state.exercises.keys()))
+    filtered_flat_exercise_list = []
+    for category, ex_list in st.session_state.exercises.items():
+        if not filter_categories or category in filter_categories:
+            for ex in ex_list:
+                filtered_flat_exercise_list.append(f"[{category}] {ex}")
+                
+    selected_exs = st.multiselect("이 루틴에 포함할 운동을 순서대로 고르세요", filtered_flat_exercise_list)
     
     routine_details = []
     if selected_exs:
@@ -343,24 +404,76 @@ with tab_manage:
             reps = c3.number_input("횟수", min_value=1, value=10, key=f"rep_{ex}", label_visibility="collapsed")
             routine_details.append({"name": clean_name, "target_sets": sets, "target_reps": reps})
             
-    if st.button("💾 저장", type="primary", use_container_width=True):
+    if st.button("💾 새 루틴 저장 및 공유하기", type="primary", use_container_width=True):
         if new_routine_name and routine_details:
-            save_routine_to_sheet(new_routine_name, routine_details)
-            st.success("저장됨!")
-    st.divider()
-    st.header("2. 루틴 편집 및 삭제")
-    visible_routines = [r for r in st.session_state.routines.keys() if "[매드프로페서]" not in r or (current_user and f"({current_user})" in r)]
-    if visible_routines:
-        edit_rt = st.selectbox("루틴 선택", visible_routines)
-        if st.button("🗑️ 삭제", type="secondary"):
-            del st.session_state.routines[edit_rt]
-            try:
-                sheet = doc.worksheet("Routines")
-                names = sheet.col_values(1)
-                if edit_rt in names: sheet.delete_rows(names.index(edit_rt) + 1)
-            except: pass
-            load_routines_from_sheet.clear()
-            st.rerun()
+            if save_routine_to_sheet(new_routine_name, routine_details):
+                st.success(f"'{new_routine_name}' 루틴이 DB에 저장되어 모두에게 공유되었습니다!")
+
+    st.write("---")
+
+    st.header("3. 내 루틴 편집 (순서 변경 및 세부조절)")
+    if not st.session_state.routines:
+        st.info("등록된 루틴이 없습니다.")
+    else:
+        visible_manage_routines = [
+            r for r in st.session_state.routines.keys() 
+            if "[매드프로페서]" not in r or (current_user and f"({current_user})" in r)
+        ]
+        
+        if not visible_manage_routines:
+            st.info("현재 편집할 수 있는 루틴이 없습니다.")
+        else:
+            edit_routine_name = st.selectbox("편집할 루틴을 선택하세요", visible_manage_routines)
+            routine_to_edit = st.session_state.routines[edit_routine_name]
+            
+            for i, workout in enumerate(routine_to_edit):
+                st.markdown(f"**{i + 1}. {workout['name']}**")
+                c_up, c_dn, c_del, c_exp = st.columns([1, 1, 1, 6])
+                
+                with c_up:
+                    if st.button("⬆️", key=f"up_{edit_routine_name}_{i}"):
+                        if i > 0:
+                            routine_to_edit[i], routine_to_edit[i-1] = routine_to_edit[i-1], routine_to_edit[i]
+                            save_routine_to_sheet(edit_routine_name, routine_to_edit)
+                            st.rerun()
+                with c_dn:
+                    if st.button("⬇️", key=f"dn_{edit_routine_name}_{i}"):
+                        if i < len(routine_to_edit) - 1:
+                            routine_to_edit[i], routine_to_edit[i+1] = routine_to_edit[i+1], routine_to_edit[i]
+                            save_routine_to_sheet(edit_routine_name, routine_to_edit)
+                            st.rerun()
+                with c_del:
+                    if st.button("❌", key=f"del_{edit_routine_name}_{i}"):
+                        routine_to_edit.pop(i)
+                        save_routine_to_sheet(edit_routine_name, routine_to_edit)
+                        st.rerun()
+                        
+                with c_exp:
+                    with st.expander("세트/횟수 세부 설정", expanded=False):
+                        ec1, ec2 = st.columns(2)
+                        new_sets = ec1.number_input("목표 세트수", min_value=1, value=workout['target_sets'], key=f"esets_{edit_routine_name}_{i}")
+                        new_reps = ec2.number_input("목표 횟수", min_value=1, value=workout['target_reps'], key=f"ereps_{edit_routine_name}_{i}")
+                        if new_sets != workout['target_sets'] or new_reps != workout['target_reps']:
+                            workout['target_sets'] = new_sets
+                            workout['target_reps'] = new_reps
+                            if st.button("세부 설정 적용", key=f"apply_{edit_routine_name}_{i}"):
+                                save_routine_to_sheet(edit_routine_name, routine_to_edit)
+                                st.success("적용됨")
+
+            if st.button("🗑️ 이 루틴 전체 삭제", type="secondary", key=f"del_all_{edit_routine_name}"):
+                del st.session_state.routines[edit_routine_name]
+                try:
+                    sheet = doc.worksheet("Routines")
+                    names_in_sheet = sheet.col_values(1)
+                    if edit_routine_name in names_in_sheet:
+                        row_idx = names_in_sheet.index(edit_routine_name) + 1
+                        sheet.delete_rows(row_idx)
+                except Exception as e: pass
+                
+                load_routines_from_sheet.clear()
+                if st.session_state.get('active_routine_name') == edit_routine_name:
+                    del st.session_state['active_routine_name']
+                st.rerun()
 
 # ==========================================
 # [탭 1] 오늘의 운동 기록 화면
@@ -470,7 +583,6 @@ with tab_workout:
 
                         st.write("")
                         
-                        # ⭐ 데이터 에디터 키 (무게 컬럼 이름을 짧게 수정)
                         editor_key = f"de_{w_idx}"
                         
                         if editor_key not in st.session_state:
@@ -496,7 +608,6 @@ with tab_workout:
                             st.session_state[f"prev_{editor_key}"] = [True] * sets
                             st.session_state[f"mark_all_{w_idx}"] = False
 
-                        # 🚨 모바일 최적화: width="small" 강제 부여 및 헤더 단축
                         edited_df = st.data_editor(
                             st.session_state[editor_key],
                             hide_index=True,
