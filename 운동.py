@@ -306,10 +306,10 @@ with tab_analysis:
                             num_rows="dynamic",
                             use_container_width=True,
                             column_config={
-                                "루틴이름": st.column_config.SelectboxColumn("루틴 이름", options=routine_options, width="medium"),
-                                "종목": st.column_config.SelectboxColumn("종목명(루틴기준)", options=ex_options, required=True, width="medium"),
+                                "루틴이름": st.column_config.SelectboxColumn("루틴이름", options=routine_options, width="medium"),
+                                "종목": st.column_config.SelectboxColumn("종목명", options=ex_options, required=True, width="medium"),
                                 "세트": st.column_config.NumberColumn("세트", min_value=1, step=1, required=True, width="small"),
-                                "무게": st.column_config.NumberColumn("무게(kg)", min_value=0.0, step=0.5, required=True, width="small"),
+                                "무게": st.column_config.NumberColumn("무게", min_value=0.0, step=0.5, required=True, width="small"),
                                 "횟수": st.column_config.NumberColumn("횟수", min_value=0, step=1, required=True, width="small"),
                             },
                             key=f"editor_{s_date}"
