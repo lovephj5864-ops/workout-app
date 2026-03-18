@@ -12,48 +12,52 @@ import calendar
 import streamlit.components.v1 as components
 
 # ==========================================
-# ⭐ 모바일 최적화 CSS (독소 코드 제거 & 달력만 핀셋 적용)
-# ==========================================
-# ==========================================
-# ⭐ 모바일 최적화 CSS (독소 코드 제거 & 달력만 핀셋 적용)
+# ⭐ 모바일 최적화 CSS (모바일 세로 나열 완벽 차단)
 # ==========================================
 st.set_page_config(page_title="운동 트래커", layout="centered")
 st.markdown("""
 <style>
-    /* 1. 스마트폰 화면 좌우 낭비되는 여백 깔끔하게 축소 */
+    /* 1. 스마트폰 화면 좌우 여백 깔끔하게 축소 */
     .block-container {
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
         padding-top: 1rem !important;
     }
     
-    /* 2. 📅 [핵심 해결] 모바일 100% 팽창 강제 차단 및 7등분 고정 */
-    /* st.columns(7)로 만들어진 '정확히 7개짜리 열'만 찾아내서 세로로 쌓이는 것을 원천 봉쇄함 */
-    div[data-testid="column"]:nth-child(1):nth-last-child(7),
-    div[data-testid="column"]:nth-child(1):nth-last-child(7) ~ div[data-testid="column"] {
-        width: 14.28% !important;
-        min-width: 10% !important;
-        max-width: 14.28% !important;
-        flex: 1 1 14.28% !important;
-        padding: 0 1px !important;
-    }
+    /* 2. 📅 [궁극의 해결책] 모바일에서 세로로 길게 나열되는 현상 완벽 차단 */
+    @media screen and (max-width: 768px) {
+        /* 스트림릿의 모바일 세로 본능을 파괴하고 '가로 배열' 강제 유지 */
+        div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-direction: row !important; 
+            flex-wrap: wrap !important;     
+            gap: 2px !important; /* 좁은 모바일을 위해 열 간격 최소화 */
+        }
+        
+        /* 각 버튼이 100%로 거대해지는 것을 막고, 7개가 한 줄에 들어가도록 13%씩 강제 분배 */
+        div[data-testid="column"] {
+            width: auto !important;
+            flex: 1 1 13% !important; /* 100% ÷ 7 = 약 14%. 최소 13% 공간 보장 */
+            min-width: 13% !important; 
+            padding: 0 1px !important;
+        }
+        
+        /* 버튼 내부 쓸데없는 여백을 날려버려서 글씨가 안 잘리게 만듦 */
+        div[data-testid="column"] button {
+            padding: 0 !important;
+            margin: 0 !important;
+            min-height: 40px !important;
+            height: 40px !important;
+            font-size: 13px !important;
+            width: 100% !important;
+        }
 
-    /* 3. 달력 내부 버튼 크기 최적화 (거대해지는 것 방지) */
-    div[data-testid="column"]:nth-child(1):nth-last-child(7) button,
-    div[data-testid="column"]:nth-child(1):nth-last-child(7) ~ div[data-testid="column"] button {
-        padding: 0 !important;
-        min-height: 40px !important;
-        height: 40px !important;
-        font-size: 11px !important;
-        width: 100% !important;
-        margin: 0 !important;
-    }
-    
-    /* 4. 요일 텍스트(월,화,수...) 여백 최소화 */
-    div[data-testid="column"]:nth-child(1):nth-last-child(7) div[data-testid="stMarkdownContainer"] p,
-    div[data-testid="column"]:nth-child(1):nth-last-child(7) ~ div[data-testid="column"] div[data-testid="stMarkdownContainer"] p {
-        font-size: 12px !important;
-        margin-bottom: 0 !important;
+        /* 요일(월, 화, 수) 텍스트 높이 최적화 */
+        div[data-testid="stMarkdownContainer"] p {
+            font-size: 13px !important;
+            margin-bottom: 2px !important;
+            text-align: center !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
